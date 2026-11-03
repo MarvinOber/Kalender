@@ -19,8 +19,8 @@ Jede abgeschlossene Änderung geht sofort live – keine Zwischenfreigabe, keine
 1. Tests grün (Backend `pytest` + `ruff check .`, Frontend `npm test`); rote Tests erst beheben.
 2. README mitpflegen (Funktionen, Ordner, Tests, „Getroffene Annahmen“), dann committen.
 3. `git push origin main` – direkt auf `main`.
-4. `.\scripts\deploy.ps1` ohne Parameter (Projekt aus `gcloud config`, OAuth-Client-ID und Freigabeliste aus
-   dem laufenden Dienst; dauert einige Minuten, im Hintergrund laufen lassen).
+4. `.\scripts\deploy.ps1` ohne Parameter (Projekt aus `gcloud config`, OAuth-Client-ID, Freigabeliste und
+   `KALENDER_PUBLIC_URL` aus dem laufenden Dienst; dauert einige Minuten, im Hintergrund laufen lassen).
 5. Prüfen: `GET <Dienst-URL>/api/health` antwortet 200; Ergebnis in der Abschlussmeldung nennen.
 
 Das Repo ist öffentlich: E-Mail-Adressen, Client-IDs und Schlüssel nie einchecken.

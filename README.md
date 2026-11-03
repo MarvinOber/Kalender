@@ -194,8 +194,9 @@ drei Secrets) und die Artifact Registry mit Aufräumregel an, baut das Image mit
 den Dienst `kalender` in `europe-west1`. Erneut ausführen nach jeder Code- oder Einstellungsänderung; es setzt
 Umgebungsvariablen und Secrets immer vollständig.
 
-Folge-Deployments brauchen keine Parameter: Das Projekt kommt aus `gcloud config`, OAuth-Client-ID und
-Freigabeliste übernimmt das Skript aus dem laufenden Dienst. Angegebene Parameter haben Vorrang (z. B. eine
+Folge-Deployments brauchen keine Parameter: Das Projekt kommt aus `gcloud config`, OAuth-Client-ID,
+Freigabeliste und öffentliche Adresse (`KALENDER_PUBLIC_URL`, passend zur Weiterleitungs-URI) übernimmt das
+Skript aus dem laufenden Dienst. Angegebene Parameter haben Vorrang (z. B. eine
 neue `-AllowedEmails`).
 
 ```powershell

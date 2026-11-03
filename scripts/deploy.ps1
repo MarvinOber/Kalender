@@ -11,7 +11,7 @@
   kalender-oauth-client-secret füllen.
 
   Bei einem bestehenden Dienst reicht ".\scripts\deploy.ps1" ohne Parameter: Projekt kommt aus
-  "gcloud config", OAuth-Client-ID und Freigabeliste aus dem laufenden Dienst.
+  "gcloud config", OAuth-Client-ID, Freigabeliste und öffentliche Adresse aus dem laufenden Dienst.
 
 .EXAMPLE
   .\scripts\deploy.ps1 -ProjectId mein-projekt -OAuthClientId 123-abc.apps.googleusercontent.com `
@@ -57,13 +57,15 @@ if (-not $ProjectId) { $ProjectId = Get-Gcloud config get-value project }
 if (-not $ProjectId) { throw "Kein Projekt: -ProjectId angeben oder 'gcloud config set project …'." }
 
 # Fehlende Angaben aus dem laufenden Dienst übernehmen (Folge-Deployments ohne Parameter)
-if (-not $OAuthClientId -or -not $AllowedEmails) {
+if (-not $OAuthClientId -or -not $AllowedEmails -or -not $PublicUrl) {
   $json = Get-Gcloud run services describe $Service --region=$Region --project=$ProjectId --format=json
   if ($json) {
     $current = @{}
     foreach ($e in (ConvertFrom-Json $json).spec.template.spec.containers[0].env) { $current[$e.name] = $e.value }
     if (-not $OAuthClientId) { $OAuthClientId = $current["GOOGLE_OAUTH_CLIENT_ID"] }
     if (-not $AllowedEmails) { $AllowedEmails = $current["KALENDER_ALLOWED_EMAILS"] }
+    # Adresse behalten, die beim OAuth-Client als Weiterleitung eingetragen ist (Cloud Run kennt zwei Formen)
+    if (-not $PublicUrl) { $PublicUrl = $current["KALENDER_PUBLIC_URL"] }
   }
 }
 if (-not $OAuthClientId -or -not $AllowedEmails) {
