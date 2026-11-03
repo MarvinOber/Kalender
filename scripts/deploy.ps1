@@ -10,14 +10,17 @@
   Vorher von Hand (siehe README): OAuth-Client anlegen, Secrets kalender-openrouter-key und
   kalender-oauth-client-secret füllen.
 
+  Bei einem bestehenden Dienst reicht ".\scripts\deploy.ps1" ohne Parameter: Projekt kommt aus
+  "gcloud config", OAuth-Client-ID und Freigabeliste aus dem laufenden Dienst.
+
 .EXAMPLE
   .\scripts\deploy.ps1 -ProjectId mein-projekt -OAuthClientId 123-abc.apps.googleusercontent.com `
     -AllowedEmails "mama@gmail.com,papa@gmail.com,tablet@gmail.com" -BillingAccount 0123-4567-89AB -BudgetEur 5
 #>
 param(
-  [Parameter(Mandatory = $true)] [string] $ProjectId,
-  [Parameter(Mandatory = $true)] [string] $OAuthClientId,
-  [Parameter(Mandatory = $true)] [string] $AllowedEmails,
+  [string] $ProjectId = "",
+  [string] $OAuthClientId = "",
+  [string] $AllowedEmails = "",
   [string] $Region = "europe-west1",
   [string] $FirestoreLocation = "eur3",
   [string] $Service = "kalender",
@@ -48,6 +51,23 @@ function Get-Gcloud {
   $out = & gcloud @args 2>$null
   if ($LASTEXITCODE -ne 0) { return "" }
   return ($out -join "`n").Trim()
+}
+
+if (-not $ProjectId) { $ProjectId = Get-Gcloud config get-value project }
+if (-not $ProjectId) { throw "Kein Projekt: -ProjectId angeben oder 'gcloud config set project …'." }
+
+# Fehlende Angaben aus dem laufenden Dienst übernehmen (Folge-Deployments ohne Parameter)
+if (-not $OAuthClientId -or -not $AllowedEmails) {
+  $json = Get-Gcloud run services describe $Service --region=$Region --project=$ProjectId --format=json
+  if ($json) {
+    $current = @{}
+    foreach ($e in (ConvertFrom-Json $json).spec.template.spec.containers[0].env) { $current[$e.name] = $e.value }
+    if (-not $OAuthClientId) { $OAuthClientId = $current["GOOGLE_OAUTH_CLIENT_ID"] }
+    if (-not $AllowedEmails) { $AllowedEmails = $current["KALENDER_ALLOWED_EMAILS"] }
+  }
+}
+if (-not $OAuthClientId -or -not $AllowedEmails) {
+  throw "Erstes Deployment: -OAuthClientId und -AllowedEmails angeben (siehe README)."
 }
 
 Write-Host "== Projekt $ProjectId, Region $Region" -ForegroundColor Cyan

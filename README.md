@@ -133,6 +133,12 @@ $env:OPENROUTER_API_KEY = "sk-or-v1-…"; $env:KALENDER_LIVE_TESTS = "1"
 .venv\Scripts\python -m pytest -m live -v
 ```
 
+## Auslieferung
+
+Es gibt nur den Branch `main`. Jede Änderung wird nach grünen Tests direkt nach `main` gepusht und sofort mit
+`.\scripts\deploy.ps1` veröffentlicht – ohne Pull Request und ohne Zwischenfreigabe. Danach prüft
+`GET /api/health` auf der Dienst-Adresse, ob die neue Version läuft.
+
 ## Einrichtung in Google Cloud
 
 Alle Befehle in PowerShell, angemeldet mit `gcloud auth login`. `PROJEKT` durch die eigene Projekt-ID ersetzen.
@@ -187,6 +193,14 @@ API), legt Firestore (`eur3`), das Dienstkonto `kalender-run` (nur `roles/datast
 drei Secrets) und die Artifact Registry mit Aufräumregel an, baut das Image mit Cloud Build und veröffentlicht
 den Dienst `kalender` in `europe-west1`. Erneut ausführen nach jeder Code- oder Einstellungsänderung; es setzt
 Umgebungsvariablen und Secrets immer vollständig.
+
+Folge-Deployments brauchen keine Parameter: Das Projekt kommt aus `gcloud config`, OAuth-Client-ID und
+Freigabeliste übernimmt das Skript aus dem laufenden Dienst. Angegebene Parameter haben Vorrang (z. B. eine
+neue `-AllowedEmails`).
+
+```powershell
+.\scripts\deploy.ps1
+```
 
 Die Freigabeliste (`-AllowedEmails`) ist Pflicht: Ohne sie startet der Dienst nicht.
 
@@ -257,4 +271,6 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | Ansicht wählt die Familie, nicht mehr die Ausrichtung des Geräts; Standard *Woche*, Wahl je Gerät in `localStorage` | Auftrag „Default Woche“; gespeichert wie der Filter, damit das Wand-Tablet nach einem Neustart gleich bleibt. |
 | *Termine* zeigt dieselbe Woche wie *Woche*, nur als Liste | bisherige Tagesliste weiterverwendet; Blättern und „Heute“ verhalten sich in beiden gleich. |
 | Monat: Termine je Tag als Zeile, mehrtägige an jedem Tag einzeln; Tippen auf den Tag öffnet die Woche | lesbar in schmalen Zellen ohne Balkenlogik über Zellgrenzen; Details stehen in der Wochenansicht. |
+| Jede Änderung direkt nach `main` und sofort deployen | Auftrag „ohne Nachfragen“; Familien-App mit einem Entwickler, Fehler lassen sich mit dem nächsten Deployment schnell beheben. |
+| Deploy-Parameter aus dem laufenden Dienst statt im Repo | Repo ist öffentlich; E-Mail-Adressen und Client-ID gehören nicht hinein. |
 | Lokale Kalender-Attrappe zeigt Serien nur mit dem ersten Termin | Google expandiert Serien selbst (`singleEvents=true`); die Attrappe dient nur der Entwicklung. |
