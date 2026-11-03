@@ -12,7 +12,7 @@
 
 .EXAMPLE
   .\scripts\deploy.ps1 -ProjectId mein-projekt -OAuthClientId 123-abc.apps.googleusercontent.com `
-    -AllowedEmails "mama@gmail.com,papa@gmail.com,tablet@gmail.com"
+    -AllowedEmails "mama@gmail.com,papa@gmail.com,tablet@gmail.com" -BillingAccount 0123-4567-89AB -BudgetEur 5
 #>
 param(
   [Parameter(Mandatory = $true)] [string] $ProjectId,
@@ -21,21 +21,33 @@ param(
   [string] $Region = "europe-west1",
   [string] $FirestoreLocation = "eur3",
   [string] $Service = "kalender",
-  [string] $PublicUrl = ""
+  [string] $PublicUrl = "",
+  [string] $BillingAccount = "",
+  [int] $BudgetEur = 0
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 
+# gcloud schreibt Hinweise nach stderr; Windows PowerShell macht daraus bei "Stop" abbrechende Fehler.
+# Deshalb in den Helfern "Continue" – es zählt nur der Exit-Code.
 function Invoke-Gcloud {
-  # gcloud schreibt Hinweise nach stderr; nur der Exit-Code zählt
-  & gcloud @args
+  $ErrorActionPreference = "Continue"
+  & gcloud @args 2>&1 | ForEach-Object { "$_" }
   if ($LASTEXITCODE -ne 0) { throw "gcloud $($args -join ' ') ist fehlgeschlagen ($LASTEXITCODE)." }
 }
 
 function Test-Gcloud {
+  $ErrorActionPreference = "Continue"
   & gcloud @args 2>$null | Out-Null
   return $LASTEXITCODE -eq 0
+}
+
+function Get-Gcloud {
+  $ErrorActionPreference = "Continue"
+  $out = & gcloud @args 2>$null
+  if ($LASTEXITCODE -ne 0) { return "" }
+  return ($out -join "`n").Trim()
 }
 
 Write-Host "== Projekt $ProjectId, Region $Region" -ForegroundColor Cyan
@@ -45,7 +57,8 @@ $Repo = "$Region-docker.pkg.dev/$ProjectId/$Service"
 
 Write-Host "== Dienste aktivieren" -ForegroundColor Cyan
 Invoke-Gcloud services enable run.googleapis.com firestore.googleapis.com secretmanager.googleapis.com `
-  artifactregistry.googleapis.com cloudbuild.googleapis.com calendar-json.googleapis.com iam.googleapis.com --quiet
+  artifactregistry.googleapis.com cloudbuild.googleapis.com calendar-json.googleapis.com iam.googleapis.com `
+  billingbudgets.googleapis.com --quiet
 
 Write-Host "== Firestore" -ForegroundColor Cyan
 if (-not (Test-Gcloud firestore databases describe --database="(default)")) {
@@ -86,12 +99,13 @@ if (-not (Test-Gcloud artifacts repositories describe $Service --location=$Regio
 }
 # Aufräumen: die letzten 3 Images behalten, ältere als 7 Tage löschen
 $policy = New-TemporaryFile
-@'
+# Ohne BOM schreiben – "Set-Content -Encoding utf8" setzt in Windows PowerShell eins, das gcloud nicht liest
+[IO.File]::WriteAllText($policy, @'
 [
   {"name": "keep-recent", "action": {"type": "Keep"}, "mostRecentVersions": {"keepCount": 3}},
   {"name": "delete-old", "action": {"type": "Delete"}, "condition": {"olderThan": "604800s"}}
 ]
-'@ | Set-Content -Path $policy -Encoding utf8
+'@)
 Invoke-Gcloud artifacts repositories set-cleanup-policies $Service --location=$Region --policy=$policy --no-dry-run --quiet | Out-Null
 Remove-Item $policy
 
@@ -103,7 +117,7 @@ try { Invoke-Gcloud builds submit . --tag $Image --region=$Region --quiet } fina
 
 Write-Host "== Cloud Run" -ForegroundColor Cyan
 if (-not $PublicUrl) {
-  $PublicUrl = (& gcloud run services describe $Service --region=$Region --format="value(status.url)" 2>$null)
+  $PublicUrl = Get-Gcloud run services describe $Service --region=$Region --format="value(status.url)"
 }
 # „^;^“: Semikolon als Trenner, weil die Freigabeliste Kommas enthält
 $envVars = "^;^KALENDER_BACKEND=cloud;GOOGLE_CLOUD_PROJECT=$ProjectId;GOOGLE_OAUTH_CLIENT_ID=$OAuthClientId;" +
@@ -114,11 +128,21 @@ Invoke-Gcloud run deploy $Service --image $Image --region $Region --service-acco
   --memory 512Mi --cpu 1 --concurrency 20 --min-instances 0 --max-instances 2 --timeout 120 --cpu-boost `
   --set-env-vars $envVars --set-secrets $secrets --quiet
 
-$Url = (& gcloud run services describe $Service --region=$Region --format="value(status.url)")
+$Url = Get-Gcloud run services describe $Service --region=$Region --format="value(status.url)"
 if (-not $PublicUrl) {
   # Erstes Deployment: Adresse war vorher unbekannt – jetzt fest eintragen
   Invoke-Gcloud run services update $Service --region $Region --update-env-vars "KALENDER_PUBLIC_URL=$Url" --quiet
   $PublicUrl = $Url
+}
+
+if ($BudgetEur -gt 0 -and $BillingAccount) {
+  Write-Host "== Budget-Warnung ($BudgetEur EUR/Monat)" -ForegroundColor Cyan
+  $existing = Get-Gcloud billing budgets list --billing-account=$BillingAccount --format="value(displayName)"
+  if ($existing -notmatch "Familienkalender $ProjectId") {
+    Invoke-Gcloud billing budgets create --billing-account=$BillingAccount --display-name="Familienkalender $ProjectId" `
+      --budget-amount="${BudgetEur}EUR" --filter-projects="projects/$ProjectId" `
+      --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0 --quiet
+  }
 }
 
 Write-Host ""

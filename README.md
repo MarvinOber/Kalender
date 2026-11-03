@@ -179,6 +179,9 @@ Umgebungsvariablen und Secrets immer vollständig.
 
 Die Freigabeliste (`-AllowedEmails`) ist Pflicht: Ohne sie startet der Dienst nicht.
 
+Bricht der Build direkt nach dem Anlegen des Projekts mit `PERMISSION_DENIED` ab, sind die frisch aktivierten
+Dienste noch nicht überall angekommen – eine Minute warten und das Skript erneut ausführen.
+
 ### 5. Weiterleitungs-URI eintragen (einmalig)
 
 Das Skript gibt am Ende die Adresse aus, z. B. `https://kalender-123456789.europe-west1.run.app`. Beim
