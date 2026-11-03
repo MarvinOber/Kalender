@@ -160,10 +160,11 @@ export function App() {
   useEffect(() => saveFilter(filter), [filter]);
   useEffect(() => saveView(view), [view]);
 
-  // Zeigt die Ansicht gerade heute, bleibt es beim Wechsel bei heute; sonst beim Anfang des geblätterten Zeitraums
+  // „Termine“ beginnt immer heute, unabhängig von der geblätterten Woche bzw. dem Monat.
+  // Woche und Monat: zeigt die Ansicht gerade heute, bleibt es bei heute; sonst beim Anfang des geblätterten Zeitraums
   const changeView = useCallback(
     (v: View) => {
-      if (samePeriod(view, anchor, today)) setAnchor(today);
+      if (v === "list" || samePeriod(view, anchor, today)) setAnchor(today);
       setView(v);
     },
     [view, anchor, today],

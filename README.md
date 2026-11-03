@@ -270,7 +270,7 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | Wetter von Open-Meteo über das Backend | frei und ohne Schlüssel; ein Abruf für alle Geräte, Fehler lassen den letzten Stand stehen. |
 | Filter: innerhalb einer Gruppe *oder*, zwischen Personen und Ereignissen *und* | übliche Mehrfachfilter-Logik. |
 | Ansicht wählt die Familie, nicht mehr die Ausrichtung des Geräts; Standard *Woche*, Wahl je Gerät in `localStorage` | Auftrag „Default Woche“; gespeichert wie der Filter, damit das Wand-Tablet nach einem Neustart gleich bleibt. |
-| *Termine* zeigt die nächsten 31 Tage ab heute, unabhängig von Woche und Monat; Pfeile blättern 31 Tage, um Mitternacht rückt die Liste mit | Auftrag „alle Termine in den nächsten 31 Tagen“; die API liefert bis 42 Tage am Stück. |
+| *Termine* zeigt die nächsten 31 Tage ab heute, unabhängig von der zuvor gewählten Woche oder dem Monat; Pfeile blättern 31 Tage, um Mitternacht rückt die Liste mit | Auftrag „alle Termine in den nächsten 31 Tagen“; die API liefert bis 42 Tage am Stück. |
 | Monat: Termine je Tag als Zeile, mehrtägige an jedem Tag einzeln; Tippen auf den Tag öffnet die Woche | lesbar in schmalen Zellen ohne Balkenlogik über Zellgrenzen; Details stehen in der Wochenansicht. |
 | Jede Änderung direkt nach `main` und sofort deployen | Auftrag „ohne Nachfragen“; Familien-App mit einem Entwickler, Fehler lassen sich mit dem nächsten Deployment schnell beheben. |
 | Deploy-Parameter aus dem laufenden Dienst statt im Repo | Repo ist öffentlich; E-Mail-Adressen und Client-ID gehören nicht hinein. |
