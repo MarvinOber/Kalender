@@ -4,7 +4,7 @@ Wochenkalender für ein Tablet oder einen Bildschirm an der Wand. Termine werden
 strukturierte Einträge verwandelt, im Dialog bestätigt und dann in einen Google-Kalender geschrieben.
 
 - **Drei Ansichten**, umschaltbar im Kopf, Standard *Woche* (die Wahl bleibt im Gerät gespeichert):
-  *Termine* – die Woche als Tagesliste; *Woche* – Zeitraster Mo–So ohne Scrollen, ganztägige Termine oben,
+  *Termine* – nur die Termine der Woche als Liste, Tage ohne Termine entfallen; *Woche* – Zeitraster Mo–So ohne Scrollen, ganztägige Termine oben,
   Linie für die aktuelle Uhrzeit; *Monat* – volle Wochen Mo–So, je Tag so viele Termine wie hineinpassen,
   sonst „+n weitere“ (Tippen auf Tag oder „+n“ öffnet dessen Woche). Eigene Darstellung über die Calendar API,
   Farben je Person. Pfeile und Wischen blättern Woche bzw. Monat, „Heute“ springt zurück. Aktualisierung alle
@@ -270,7 +270,7 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | Wetter von Open-Meteo über das Backend | frei und ohne Schlüssel; ein Abruf für alle Geräte, Fehler lassen den letzten Stand stehen. |
 | Filter: innerhalb einer Gruppe *oder*, zwischen Personen und Ereignissen *und* | übliche Mehrfachfilter-Logik. |
 | Ansicht wählt die Familie, nicht mehr die Ausrichtung des Geräts; Standard *Woche*, Wahl je Gerät in `localStorage` | Auftrag „Default Woche“; gespeichert wie der Filter, damit das Wand-Tablet nach einem Neustart gleich bleibt. |
-| *Termine* zeigt dieselbe Woche wie *Woche*, nur als Liste | bisherige Tagesliste weiterverwendet; Blättern und „Heute“ verhalten sich in beiden gleich. |
+| *Termine* zeigt dieselbe Woche wie *Woche*, nur als Liste der Termine (ohne leere Tage) | bisherige Tagesliste weiterverwendet; Blättern und „Heute“ verhalten sich in beiden gleich. |
 | Monat: Termine je Tag als Zeile, mehrtägige an jedem Tag einzeln; Tippen auf den Tag öffnet die Woche | lesbar in schmalen Zellen ohne Balkenlogik über Zellgrenzen; Details stehen in der Wochenansicht. |
 | Jede Änderung direkt nach `main` und sofort deployen | Auftrag „ohne Nachfragen“; Familien-App mit einem Entwickler, Fehler lassen sich mit dem nächsten Deployment schnell beheben. |
 | Deploy-Parameter aus dem laufenden Dienst statt im Repo | Repo ist öffentlich; E-Mail-Adressen und Client-ID gehören nicht hinein. |

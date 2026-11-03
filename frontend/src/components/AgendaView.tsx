@@ -14,18 +14,21 @@ interface Props {
   onSelect: (e: CalEvent) => void;
 }
 
-/** Ansicht „Termine“: die Woche als Liste, ein Abschnitt je Tag – gut lesbar auch im Hochformat. */
+/** Ansicht „Termine“: die Termine der Woche als Liste, ein Abschnitt je Tag mit Terminen – gut lesbar auch im Hochformat. */
 export function AgendaView({ events, monday, today, nowMinutes, settings, onSelect }: Props) {
   const segments = timedSegments(events, monday);
   const bars = allDayBars(events, monday);
+  const days = Array.from({ length: 7 }, (_, i) => ({
+    i,
+    d: addDays(monday, i),
+    allDay: bars.filter((b) => b.startCol <= i && b.startCol + b.span > i).map((b) => b.event),
+    timed: [...segments[i]].sort((a, b) => a.start - b.start),
+  })).filter(({ allDay, timed }) => allDay.length > 0 || timed.length > 0);
   return (
     <div className="agenda">
-      {Array.from({ length: 7 }, (_, i) => {
-        const d = addDays(monday, i);
-        const allDay = bars.filter((b) => b.startCol <= i && b.startCol + b.span > i).map((b) => b.event);
-        const timed = [...segments[i]].sort((a, b) => a.start - b.start);
+      {days.length === 0 && <div className="empty">{t("Keine Termine")}</div>}
+      {days.map(({ i, d, allDay, timed }) => {
         const nowIndex = d === today ? timed.findIndex((s) => s.start > nowMinutes) : -2;
-        const empty = allDay.length === 0 && timed.length === 0;
         return (
           <section key={d} className={`agenda-day ${d === today ? "today" : ""} ${d < today ? "past" : ""}`}>
             <h2>
@@ -53,7 +56,6 @@ export function AgendaView({ events, monday, today, nowMinutes, settings, onSele
                 </Fragment>
               ))}
               {d === today && nowIndex === -1 && timed.length > 0 && <div className="now-row" />}
-              {empty && <div className="empty">{t("Keine Termine")}</div>}
             </div>
           </section>
         );
