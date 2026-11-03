@@ -1,34 +1,33 @@
 import { Fragment } from "react";
-import { addDays, formatDay, hhmm } from "../dates";
+import { addDays, formatDay, hhmm, minutesOf } from "../dates";
 import { locale, t } from "../i18n";
-import { allDayBars, timedSegments } from "../layout";
+import { dayItems } from "../layout";
 import type { CalEvent, Settings } from "../types";
 import { eventStyle, personNames, tagNames } from "./eventStyle";
 
 interface Props {
   events: CalEvent[];
-  monday: string;
+  start: string;
+  days: number;
   today: string;
   nowMinutes: number;
   settings: Settings;
   onSelect: (e: CalEvent) => void;
 }
 
-/** Ansicht „Termine“: die Termine der Woche als Liste, ein Abschnitt je Tag mit Terminen – gut lesbar auch im Hochformat. */
-export function AgendaView({ events, monday, today, nowMinutes, settings, onSelect }: Props) {
-  const segments = timedSegments(events, monday);
-  const bars = allDayBars(events, monday);
-  const days = Array.from({ length: 7 }, (_, i) => ({
-    i,
-    d: addDays(monday, i),
-    allDay: bars.filter((b) => b.startCol <= i && b.startCol + b.span > i).map((b) => b.event),
-    timed: [...segments[i]].sort((a, b) => a.start - b.start),
-  })).filter(({ allDay, timed }) => allDay.length > 0 || timed.length > 0);
+/** Ansicht „Termine“: alle Termine der nächsten Tage als Liste, ein Abschnitt je Tag mit Terminen. */
+export function AgendaView({ events, start, days, today, nowMinutes, settings, onSelect }: Props) {
+  // Mehrtägige ganztägige Termine (Ferien) nur einmal am ersten sichtbaren Tag, mit „bis …“
+  const list = dayItems(events, start, days)
+    .map((items, i) => ({ d: addDays(start, i), items: items.filter((x) => !(x.allDay && x.continuesBefore && i > 0)) }))
+    .filter(({ items }) => items.length > 0);
   return (
     <div className="agenda">
-      {days.length === 0 && <div className="empty">{t("Keine Termine")}</div>}
-      {days.map(({ i, d, allDay, timed }) => {
-        const nowIndex = d === today ? timed.findIndex((s) => s.start > nowMinutes) : -2;
+      {list.length === 0 && <div className="empty">{t("Keine Termine")}</div>}
+      {list.map(({ d, items }) => {
+        const nowIndex =
+          d === today ? items.findIndex((x) => !x.allDay && !x.continuesBefore && minutesOf(x.event.start) > nowMinutes) : -2;
+        const hasTimed = items.some((x) => !x.allDay);
         return (
           <section key={d} className={`agenda-day ${d === today ? "today" : ""} ${d < today ? "past" : ""}`}>
             <h2>
@@ -36,26 +35,27 @@ export function AgendaView({ events, monday, today, nowMinutes, settings, onSele
               <span className="dn">{formatDay(d, locale(), { day: "numeric", month: "long" })}</span>
             </h2>
             <div className="agenda-items">
-              {allDay.map((e) => (
-                <button key={e.id} className="ev agenda-ev allday-ev" style={eventStyle(e, settings)} onClick={() => onSelect(e)}>
-                  <span className="ev-time">{t("ganztägig")}</span>
-                  <span className="ev-title">{e.title}</span>
-                  <Meta event={e} settings={settings} />
-                </button>
-              ))}
-              {timed.map((s, idx) => (
-                <Fragment key={`${s.event.id}-${i}`}>
+              {items.map(({ event, allDay, continuesBefore, continuesAfter }, idx) => (
+                <Fragment key={event.id}>
                   {idx === nowIndex && <div className="now-row" />}
-                  <button className="ev agenda-ev" style={eventStyle(s.event, settings)} onClick={() => onSelect(s.event)}>
+                  <button
+                    className={`ev agenda-ev ${allDay ? "allday-ev" : ""}`}
+                    style={eventStyle(event, settings)}
+                    onClick={() => onSelect(event)}
+                  >
                     <span className="ev-time">
-                      {s.continuesBefore ? "…" : hhmm(s.event.start)}–{s.continuesAfter ? "…" : hhmm(s.event.end)}
+                      {allDay
+                        ? continuesAfter
+                          ? `${t("bis")} ${formatDay(addDays(event.end, -1), locale(), { day: "numeric", month: "long" })}`
+                          : t("ganztägig")
+                        : `${continuesBefore ? "…" : hhmm(event.start)}–${continuesAfter ? "…" : hhmm(event.end)}`}
                     </span>
-                    <span className="ev-title">{s.event.title}</span>
-                    <Meta event={s.event} settings={settings} />
+                    <span className="ev-title">{event.title}</span>
+                    <Meta event={event} settings={settings} />
                   </button>
                 </Fragment>
               ))}
-              {d === today && nowIndex === -1 && timed.length > 0 && <div className="now-row" />}
+              {d === today && nowIndex === -1 && hasTimed && <div className="now-row" />}
             </div>
           </section>
         );

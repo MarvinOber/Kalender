@@ -103,9 +103,10 @@ export interface DayItem {
   event: CalEvent;
   allDay: boolean;
   continuesBefore: boolean;
+  continuesAfter: boolean;
 }
 
-/** Monatsübersicht: Termine je Tag ab `start`, mehrtägige an jedem Tag; ganztägige zuerst, dann nach Uhrzeit. */
+/** Monat und Terminliste: Termine je Tag ab `start`, mehrtägige an jedem Tag; ganztägige zuerst, dann nach Uhrzeit. */
 export function dayItems(events: CalEvent[], start: string, days: number): DayItem[][] {
   const result: { item: DayItem; sort: string }[][] = Array.from({ length: days }, () => []);
   for (const event of events) {
@@ -119,7 +120,8 @@ export function dayItems(events: CalEvent[], start: string, days: number): DayIt
     for (let d = Math.max(0, startDay); d <= Math.min(days - 1, endDay); d++) {
       const continuesBefore = d > startDay;
       const sort = event.all_day ? `0${event.start}` : `1${continuesBefore ? "00:00" : event.start.slice(11, 16)}`;
-      result[d].push({ item: { event, allDay: event.all_day, continuesBefore }, sort });
+      const item = { event, allDay: event.all_day, continuesBefore, continuesAfter: d < endDay };
+      result[d].push({ item, sort });
     }
   }
   return result.map((list) => list.sort((a, b) => a.sort.localeCompare(b.sort)).map((x) => x.item));

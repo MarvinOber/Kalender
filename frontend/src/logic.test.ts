@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, addMonths, isoWeek, mondayOf, nowIn } from "./dates";
+import { addDays, addMonths, isoWeek, mondayOf, nowIn, rangeLabel } from "./dates";
 import { matches, pruneFilter } from "./filter";
 import { allDayBars, dayItems, timedSegments, visibleHours } from "./layout";
 import type { CalEvent } from "./types";
@@ -29,6 +29,12 @@ describe("Datum", () => {
     expect(isoWeek("2026-11-02")).toBe(45);
     expect(isoWeek("2027-01-01")).toBe(53);
     expect(isoWeek("2026-01-01")).toBe(1);
+  });
+
+  it("beschriftet Zeiträume", () => {
+    expect(rangeLabel("2026-11-02", "2026-11-08", "de-DE")).toBe("2 – 8. November 2026");
+    expect(rangeLabel("2026-11-03", "2026-12-03", "de-DE")).toBe("3. November – 3. Dezember 2026");
+    expect(rangeLabel("2026-12-28", "2027-01-03", "de-DE")).toBe("28. Dezember 2026 – 3. Januar 2027");
   });
 
   it("nimmt die Familien-Zeitzone für jetzt", () => {
@@ -117,7 +123,7 @@ describe("Wetter", () => {
 describe("Ansicht", () => {
   it("Woche ab Montag, Monat in vollen Wochen", () => {
     expect(rangeOf("week", "2026-11-05")).toEqual({ start: "2026-11-02", days: 7 });
-    expect(rangeOf("list", "2026-11-05")).toEqual({ start: "2026-11-02", days: 7 });
+    expect(rangeOf("list", "2026-11-05")).toEqual({ start: "2026-11-05", days: 31 });
     // November 2026: Sonntag, 1. bis Montag, 30. – sechs Wochen
     expect(rangeOf("month", "2026-11-17")).toEqual({ start: "2026-10-26", days: 42 });
     // Februar 2027: Montag, 1. bis Sonntag, 28. – genau vier Wochen
@@ -126,6 +132,7 @@ describe("Ansicht", () => {
 
   it("blättert Woche und Monat", () => {
     expect(step("week", "2026-11-05", 1)).toBe("2026-11-09");
+    expect(step("list", "2026-11-05", 1)).toBe("2026-12-06");
     expect(step("month", "2026-11-17", 1)).toBe("2026-12-01");
     expect(step("month", "2026-01-31", -1)).toBe("2025-12-01");
     expect(addMonths("2026-12-15", 2)).toBe("2027-02-01");
@@ -135,6 +142,8 @@ describe("Ansicht", () => {
     expect(samePeriod("week", "2026-11-02", "2026-11-08")).toBe(true);
     expect(samePeriod("week", "2026-11-08", "2026-11-09")).toBe(false);
     expect(samePeriod("month", "2026-11-01", "2026-11-30")).toBe(true);
+    expect(samePeriod("list", "2026-11-03", "2026-11-03")).toBe(true);
+    expect(samePeriod("list", "2026-11-03", "2026-11-04")).toBe(false);
     expect(inRange(rangeOf("month", "2026-11-01"), "2026-12-06T10:00")).toBe(true);
     expect(inRange(rangeOf("month", "2026-11-01"), "2026-12-07")).toBe(false);
   });
@@ -157,5 +166,7 @@ describe("Ansicht", () => {
     expect(ids(9)).toEqual(["ferien", "nacht"]);
     expect(ids(10)).toEqual([]);
     expect(days.flat().some((x) => x.event.id === "vorher")).toBe(false);
+    expect(days[9].find((x) => x.event.id === "nacht")?.continuesAfter).toBe(false);
+    expect(days[8][0]).toMatchObject({ continuesBefore: true, continuesAfter: true });
   });
 });

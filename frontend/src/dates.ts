@@ -82,10 +82,13 @@ export function formatDay(iso: string, locale: string, opts: Intl.DateTimeFormat
   return new Intl.DateTimeFormat(locale, { timeZone: "UTC", ...opts }).format(utc(iso));
 }
 
-export function weekLabel(monday: string, locale: string): string {
-  const sunday = addDays(monday, 6);
-  const sameMonth = monday.slice(0, 7) === sunday.slice(0, 7);
-  const from = formatDay(monday, locale, sameMonth ? { day: "numeric" } : { day: "numeric", month: "long" });
-  const to = formatDay(sunday, locale, { day: "numeric", month: "long", year: "numeric" });
-  return `${from} – ${to}`;
+/** „2 – 8. November 2026“, „28. Dezember 2026 – 3. Januar 2027“ */
+export function rangeLabel(first: string, last: string, locale: string): string {
+  const opts: Intl.DateTimeFormatOptions =
+    first.slice(0, 7) === last.slice(0, 7)
+      ? { day: "numeric" }
+      : first.slice(0, 4) === last.slice(0, 4)
+        ? { day: "numeric", month: "long" }
+        : { day: "numeric", month: "long", year: "numeric" };
+  return `${formatDay(first, locale, opts)} – ${formatDay(last, locale, { day: "numeric", month: "long", year: "numeric" })}`;
 }

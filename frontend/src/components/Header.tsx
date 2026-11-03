@@ -1,4 +1,4 @@
-import { addDays, formatDay, isoWeek, weekLabel } from "../dates";
+import { addDays, formatDay, isoWeek, rangeLabel } from "../dates";
 import { locale, t } from "../i18n";
 import type { Weather } from "../types";
 import { type Range, type View, VIEW_LABELS, VIEWS } from "../view";
@@ -21,6 +21,9 @@ interface Props {
 export function Header(props: Props) {
   const { view, range, month, isCurrent, time, weather, onPrev, onNext, onToday, onView, onSettings } = props;
   const isMonth = view === "month";
+  const isList = view === "list";
+  const prevLabel = isMonth ? "Vormonat" : isList ? "Früher" : "Vorwoche";
+  const nextLabel = isMonth ? "Nächster Monat" : isList ? "Später" : "Nächste Woche";
   const fullscreen = () => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined);
     else document.documentElement.requestFullscreen?.().catch(() => undefined);
@@ -28,13 +31,13 @@ export function Header(props: Props) {
   return (
     <header className="header">
       <div className="nav">
-        <button className="icon big" aria-label={t(isMonth ? "Vormonat" : "Vorwoche")} onClick={onPrev}>
+        <button className="icon big" aria-label={t(prevLabel)} onClick={onPrev}>
           ‹
         </button>
         <button className={`btn ${isCurrent ? "" : "primary"}`} onClick={onToday}>
           {t("Heute")}
         </button>
-        <button className="icon big" aria-label={t(isMonth ? "Nächster Monat" : "Nächste Woche")} onClick={onNext}>
+        <button className="icon big" aria-label={t(nextLabel)} onClick={onNext}>
           ›
         </button>
         <div className="views" role="group" aria-label={t("Ansicht")}>
@@ -47,11 +50,19 @@ export function Header(props: Props) {
       </div>
       <div className="title">
         <span className="week-no">
-          {t("KW")} {isoWeek(range.start)}
-          {isMonth && `–${isoWeek(addDays(range.start, range.days - 7))}`}
+          {isList ? (
+            t(isCurrent ? "Nächste 31 Tage" : "31 Tage")
+          ) : (
+            <>
+              {t("KW")} {isoWeek(range.start)}
+              {isMonth && `–${isoWeek(addDays(range.start, range.days - 7))}`}
+            </>
+          )}
         </span>
         <span className="range">
-          {isMonth ? formatDay(`${month}-01`, locale(), { month: "long", year: "numeric" }) : weekLabel(range.start, locale())}
+          {isMonth
+            ? formatDay(`${month}-01`, locale(), { month: "long", year: "numeric" })
+            : rangeLabel(range.start, addDays(range.start, range.days - 1), locale())}
         </span>
       </div>
       <div className="tools">

@@ -329,7 +329,7 @@ export function App() {
         onPointerUp={(e) => swipeEnd(e, (dir) => setAnchor(step(view, anchor, dir)))}
       >
         {view === "list" && (
-          <AgendaView events={visible} monday={range.start} today={today} nowMinutes={now.minutes} settings={settings} onSelect={setDetails} />
+          <AgendaView events={visible} start={range.start} days={range.days} today={today} nowMinutes={now.minutes} settings={settings} onSelect={setDetails} />
         )}
         {view === "week" && (
           <WeekView events={visible} monday={range.start} today={today} nowMinutes={now.minutes} settings={settings} onSelect={setDetails} />

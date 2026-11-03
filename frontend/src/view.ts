@@ -1,22 +1,27 @@
 import { addDays, addMonths, daysBetween, firstOfMonth, mondayOf } from "./dates";
 
-/** Termine als Tagesliste, Wochenraster oder Monatsübersicht. */
+/** Terminliste der nächsten Tage, Wochenraster oder Monatsübersicht. */
 export type View = "list" | "week" | "month";
 
 export const VIEWS: View[] = ["list", "week", "month"];
 export const VIEW_LABELS: Record<View, string> = { list: "Termine", week: "Woche", month: "Monat" };
+export const LIST_DAYS = 31;
 
 const KEY = "familienkalender.view";
 
-/** Angezeigte Tage ab `start` (Montag). */
+/** Angezeigte Tage ab `start`. */
 export interface Range {
   start: string;
   days: number;
 }
 
-/** Woche ab Montag; Monat in vollen Wochen vom Montag vor dem Ersten bis zum Sonntag nach dem Letzten. */
+/**
+ * Liste: 31 Tage ab dem Anker (meist heute); Woche ab Montag;
+ * Monat in vollen Wochen vom Montag vor dem Ersten bis zum Sonntag nach dem Letzten.
+ */
 export function rangeOf(view: View, anchor: string): Range {
-  if (view !== "month") return { start: mondayOf(anchor), days: 7 };
+  if (view === "list") return { start: anchor, days: LIST_DAYS };
+  if (view === "week") return { start: mondayOf(anchor), days: 7 };
   const first = firstOfMonth(anchor);
   const start = mondayOf(first);
   const last = addDays(addMonths(first, 1), -1);
@@ -28,13 +33,15 @@ export function inRange(range: Range, iso: string): boolean {
   return day >= range.start && day < addDays(range.start, range.days);
 }
 
-/** Gleiche Woche bzw. gleicher Monat – für „Heute“, den Tageswechsel und die Rückkehr nach Leerlauf. */
+/** Gleicher Zeitraum – für „Heute“, den Tageswechsel und die Rückkehr nach Leerlauf. Die Liste beginnt dann am selben Tag. */
 export function samePeriod(view: View, a: string, b: string): boolean {
+  if (view === "list") return a === b;
   return view === "month" ? a.slice(0, 7) === b.slice(0, 7) : mondayOf(a) === mondayOf(b);
 }
 
-/** Eine Woche bzw. einen Monat vor oder zurück. */
+/** 31 Tage, eine Woche bzw. einen Monat vor oder zurück. */
 export function step(view: View, anchor: string, dir: number): string {
+  if (view === "list") return addDays(anchor, dir * LIST_DAYS);
   return view === "month" ? addMonths(anchor, dir) : addDays(mondayOf(anchor), dir * 7);
 }
 
