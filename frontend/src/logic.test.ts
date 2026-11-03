@@ -1,0 +1,99 @@
+import { describe, expect, it } from "vitest";
+import { addDays, isoWeek, mondayOf, nowIn } from "./dates";
+import { matches, pruneFilter } from "./filter";
+import { allDayBars, timedSegments, visibleHours } from "./layout";
+import type { CalEvent } from "./types";
+
+const ev = (p: Partial<CalEvent>): CalEvent => ({
+  id: p.id ?? Math.random().toString(36),
+  title: "T",
+  all_day: false,
+  start: "2026-11-06T16:00",
+  end: "2026-11-06T17:00",
+  location: "",
+  description: "",
+  persons: [],
+  tags: [],
+  recurring: false,
+  link: "",
+  ...p,
+});
+
+describe("Datum", () => {
+  it("rechnet Wochen", () => {
+    expect(mondayOf("2026-11-03")).toBe("2026-11-02");
+    expect(mondayOf("2026-11-08")).toBe("2026-11-02");
+    expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+    expect(isoWeek("2026-11-02")).toBe(45);
+    expect(isoWeek("2027-01-01")).toBe(53);
+    expect(isoWeek("2026-01-01")).toBe(1);
+  });
+
+  it("nimmt die Familien-Zeitzone für jetzt", () => {
+    const n = nowIn("Europe/Berlin", new Date("2026-11-03T23:30:00Z"));
+    expect(n).toEqual({ date: "2026-11-04", minutes: 30, time: "00:30" });
+  });
+});
+
+describe("Filter", () => {
+  const lena = ev({ persons: ["lena"], tags: ["sport"] });
+  const oma = ev({ all_day: true, start: "2026-11-07", end: "2026-11-08", tags: ["geburtstag"] });
+  const papa = ev({ persons: ["papa"], tags: ["arzt"] });
+
+  it("Lena zeigt nur Lenas Termine", () => {
+    expect([lena, oma, papa].filter((e) => matches(e, { persons: ["lena"], tags: [] }))).toEqual([lena]);
+  });
+
+  it("Mehrfachauswahl: innerhalb der Gruppe oder, zwischen Gruppen und", () => {
+    const f = { persons: ["lena", "papa"], tags: [] };
+    expect([lena, oma, papa].filter((e) => matches(e, f))).toEqual([lena, papa]);
+    expect([lena, oma, papa].filter((e) => matches(e, { persons: ["lena", "papa"], tags: ["arzt"] }))).toEqual([papa]);
+    expect([lena, oma, papa].filter((e) => matches(e, { persons: [], tags: [] }))).toHaveLength(3);
+  });
+
+  it("verwirft gelöschte Kennungen", () => {
+    expect(pruneFilter({ persons: ["lena", "weg"], tags: ["x"] }, ["lena"], [])).toEqual({ persons: ["lena"], tags: [] });
+  });
+});
+
+describe("Layout", () => {
+  it("legt Überschneidungen nebeneinander", () => {
+    const days = timedSegments(
+      [
+        ev({ id: "a", start: "2026-11-06T16:00", end: "2026-11-06T17:00" }),
+        ev({ id: "b", start: "2026-11-06T16:30", end: "2026-11-06T18:00" }),
+        ev({ id: "c", start: "2026-11-06T18:00", end: "2026-11-06T19:00" }),
+      ],
+      "2026-11-02",
+    );
+    const fri = days[4];
+    expect(fri.map((s) => [s.event.id, s.col, s.cols])).toEqual([
+      ["a", 0, 2],
+      ["b", 1, 2],
+      ["c", 0, 1],
+    ]);
+  });
+
+  it("schneidet Termine über Mitternacht", () => {
+    const days = timedSegments([ev({ start: "2026-11-07T22:00", end: "2026-11-08T01:00" })], "2026-11-02");
+    expect(days[5][0]).toMatchObject({ start: 1320, end: 1440, continuesAfter: true });
+    expect(days[6][0]).toMatchObject({ start: 0, end: 60, continuesBefore: true });
+    expect(visibleHours(days)).toEqual([0, 24]);
+  });
+
+  it("verteilt ganztägige Termine auf Zeilen", () => {
+    const bars = allDayBars(
+      [
+        ev({ id: "ferien", all_day: true, start: "2026-10-31", end: "2026-11-05" }),
+        ev({ id: "oma", all_day: true, start: "2026-11-07", end: "2026-11-08" }),
+        ev({ id: "x", all_day: true, start: "2026-11-03", end: "2026-11-04" }),
+      ],
+      "2026-11-02",
+    );
+    expect(bars.map((b) => [b.event.id, b.startCol, b.span, b.row])).toEqual([
+      ["ferien", 0, 3, 0],
+      ["x", 1, 1, 1],
+      ["oma", 5, 1, 0],
+    ]);
+  });
+});

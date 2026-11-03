@@ -1,0 +1,59 @@
+import type { CalEvent, Draft, Me, ModelInfo, ParseResult, Settings } from "./types";
+
+/** Fehler der API mit Code (z. B. „reauth“, „model_unavailable“) und verständlicher Meldung. */
+export class ApiError extends Error {
+  constructor(public status: number, public code: string, message: string) {
+    super(message);
+  }
+}
+
+async function request<T>(method: string, path: string, body?: BodyInit | object): Promise<T> {
+  const headers: Record<string, string> = { "X-Kalender": "1" };
+  let payload: BodyInit | undefined;
+  if (body instanceof FormData) payload = body;
+  else if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+    payload = JSON.stringify(body);
+  }
+  let resp: Response;
+  try {
+    resp = await fetch(path, { method, headers, body: payload, credentials: "same-origin" });
+  } catch {
+    throw new ApiError(0, "offline", "Keine Verbindung zum Server. Bitte Netzwerk prüfen.");
+  }
+  if (!resp.ok) {
+    let code = "error";
+    let message = `Fehler ${resp.status}`;
+    try {
+      const data = await resp.json();
+      code = data.code || code;
+      message = data.message || message;
+    } catch {
+      /* keine JSON-Antwort */
+    }
+    throw new ApiError(resp.status, code, message);
+  }
+  return (await resp.json()) as T;
+}
+
+export const api = {
+  me: () => request<Me>("GET", "/api/me"),
+  settings: () => request<Settings>("GET", "/api/settings"),
+  saveSettings: (s: Settings) => request<Settings>("PUT", "/api/settings", s),
+  models: () => request<{ models: ModelInfo[] }>("GET", "/api/models"),
+  calendars: () =>
+    request<{ calendars: { id: string; summary: string; primary: boolean }[] }>("GET", "/api/calendars"),
+  events: (start: string, days = 7) =>
+    request<{ events: CalEvent[]; fetched_at: string }>(
+      "GET",
+      `/api/events?start=${encodeURIComponent(start)}&days=${days}`,
+    ),
+  voice: (wav: Blob) => {
+    const form = new FormData();
+    form.append("audio", wav, "aufnahme.wav");
+    return request<ParseResult>("POST", "/api/voice", form);
+  },
+  parse: (text: string) => request<ParseResult>("POST", "/api/parse", { text }),
+  create: (events: Draft[]) => request<{ created: CalEvent[] }>("POST", "/api/events", { events }),
+  logout: () => request<{ ok: boolean }>("POST", "/auth/logout"),
+};

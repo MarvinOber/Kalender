@@ -1,0 +1,9 @@
+line-length = 120
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[lint.flake8-bugbear]
+# FastAPI-Abhängigkeiten stehen bewusst als Standardwert in der Signatur
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.File", "app.auth.CurrentUser"]

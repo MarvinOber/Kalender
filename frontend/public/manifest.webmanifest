@@ -1,0 +1,9 @@
+{
+  "name": "Familienkalender",
+  "short_name": "Kalender",
+  "start_url": "/",
+  "display": "fullscreen",
+  "background_color": "#f6f4ef",
+  "theme_color": "#f6f4ef",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

@@ -1,0 +1,15 @@
+# Was Cloud Build NICHT hochladen soll (sonst nimmt gcloud die .gitignore)
+.git
+.gitignore
+.claude/
+**/node_modules/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.venv/
+backend/.env
+backend/data/
+backend/static/
+backend/tests/
+frontend/dist/
+*.log
