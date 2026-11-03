@@ -385,7 +385,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .details .when { color: var(--muted); font-weight: 600; }
 .details .desc { white-space: pre-wrap; }
 .details .tags { display: flex; gap: 6px; flex-wrap: wrap; }
-.details .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+.details .actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.details .actions .spacer { flex: 1; }
+.details .actions.ask { padding-top: 12px; border-top: 1px solid var(--line); }
+.details .btn.danger { color: var(--now); border-color: color-mix(in srgb, var(--now) 50%, var(--line)); }
 
 .field, .transcript { display: flex; flex-direction: column; gap: 4px; position: relative; min-width: 0; }
 .field > span, .transcript > span, .chips > span, .recurrence > span { font-size: 0.8rem; font-weight: 600; color: var(--muted); }

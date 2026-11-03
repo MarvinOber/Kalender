@@ -8,9 +8,18 @@ from datetime import date, datetime, time
 import httpx
 import pytest
 
-from app.calendar_api import GoogleCalendar
+from app.calendar_api import GoogleCalendar, merge_patch
 from app.errors import CalendarError, ReauthRequired
-from app.events import EventDraft, Recurrence, from_google, to_google, validate_draft
+from app.events import (
+    EventDraft,
+    Recurrence,
+    from_google,
+    parse_recurrence,
+    to_draft,
+    to_google,
+    to_google_patch,
+    validate_draft,
+)
 
 from .conftest import BERLIN
 
@@ -34,6 +43,8 @@ class FakeGoogleCalendarServer:
             return httpx.Response(200, json={"items": [
                 {"id": "familie@group.calendar.google.com", "summary": "Familie"},
                 {"id": "ich@example.com", "summary": "ich@example.com", "primary": True}]})
+        if parts[-2] == "events":  # /calendars/<id>/events/<eventId>
+            return self._single(request, parts[-3], parts[-1])
         cal = parts[-2]
         if request.method == "POST":
             body = json.loads(request.content)
@@ -47,6 +58,20 @@ class FakeGoogleCalendarServer:
         if offset + self.page_size < len(items):
             data["nextPageToken"] = str(offset + self.page_size)
         return httpx.Response(200, json=data)
+
+    def _single(self, request: httpx.Request, cal: str, event_id: str) -> httpx.Response:
+        items = self.events.get(cal, [])
+        idx = next((i for i, e in enumerate(items) if e["id"] == event_id), None)
+        if idx is None:
+            return httpx.Response(404, json={"error": {"errors": [{"reason": "notFound"}]}})
+        if request.method == "GET":
+            return httpx.Response(200, json=items[idx])
+        if request.method == "PATCH":
+            items[idx] = merge_patch(items[idx], json.loads(request.content))
+            return httpx.Response(200, json=items[idx])
+        assert request.method == "DELETE"
+        del items[idx]
+        return httpx.Response(204)
 
 
 @pytest.fixture
@@ -157,3 +182,70 @@ def test_fremder_termin_person_im_titel(settings):
     event = {"id": "g2", "summary": "Lena Klavier", "start": {"date": "2026-11-05"}, "end": {"date": "2026-11-06"}}
     view = from_google(event, settings)
     assert view.all_day and view.persons == ["lena"] and view.tags == []
+
+
+# ---------- Bearbeiten und Löschen ----------
+
+def test_rueckweg_in_den_dialog(settings):
+    """Was der Dialog anlegt, kommt beim Bearbeiten unverändert wieder heraus."""
+    drafts = [
+        fussball(),
+        EventDraft(title="Party", start_date=date(2026, 11, 7), start_time=time(22, 0), end_date=date(2026, 11, 8),
+                   end_time=time(1, 0), location="Garten", description="Grill", persons=["mama", "papa"]),
+        EventDraft(title="Ferien", all_day=True, start_date=date(2026, 12, 21), end_date=date(2027, 1, 2),
+                   tags=["freizeit"]),
+        EventDraft(title="Schwimmen", start_date=date(2026, 11, 3), start_time=time(17, 0), end_time=time(18, 0),
+                   recurrence=Recurrence(freq="weekly", interval=2, by_day=["TU"], until=date(2027, 3, 30))),
+    ]
+    for draft in drafts:
+        event = {**to_google(draft, settings), "id": "x"}
+        back, editable = to_draft(event, settings)
+        expected = draft.model_copy(update={"end_time": draft.end_time or time(17, 0)} if draft is drafts[0] else {})
+        assert back == expected and editable
+
+
+def test_wiederholung_nicht_abbildbar():
+    berlin = BERLIN
+    assert parse_recurrence([], berlin) == (None, True)
+    assert parse_recurrence(["RRULE:FREQ=MONTHLY;BYDAY=2TU"], berlin) == (None, False)
+    assert parse_recurrence(["RRULE:FREQ=WEEKLY", "EXDATE:20261110T160000Z"], berlin) == (None, False)
+    rec, ok = parse_recurrence(["RRULE:FREQ=YEARLY;COUNT=5"], berlin)
+    assert ok and rec == Recurrence(freq="yearly", count=5)
+
+
+def test_einzelner_termin_einer_serie_hat_keine_eigene_wiederholung(settings):
+    instance = {"id": "s1_20261110", "recurringEventId": "s1", "summary": "Schwimmen",
+                "start": {"dateTime": "2026-11-10T17:00:00+01:00"}, "end": {"dateTime": "2026-11-10T18:00:00+01:00"}}
+    draft, editable = to_draft(instance, settings)
+    assert draft.start_date == date(2026, 11, 10) and draft.recurrence is None and not editable
+
+
+def test_bearbeiten_ueber_rest(gcal, server, settings):
+    created = gcal.insert_event("primary", to_google(fussball(), settings) | {"location": "Sportplatz"})
+    server.events["primary"][0]["reminders"] = {"useDefault": False, "overrides": [{"method": "popup", "minutes": 30}]}
+    draft, _ = to_draft(gcal.get_event("primary", created["id"]), settings)
+    draft = draft.model_copy(update={"title": "Fußballturnier", "all_day": True, "start_time": None, "end_time": None,
+                                     "location": "", "persons": ["lena", "max"]})
+    updated = gcal.patch_event("primary", created["id"], to_google_patch(draft, settings, with_recurrence=True))
+
+    req = server.requests[-1]
+    assert req.method == "PATCH" and req.url.raw_path.decode().endswith("/calendars/primary/events/e1")
+    sent = json.loads(req.content)
+    assert sent["start"] == {"date": "2026-11-06", "dateTime": None, "timeZone": None}
+    assert sent["location"] == "" and sent["recurrence"] == []
+    assert "fkSource" not in sent["extendedProperties"]["private"]  # Herkunft bleibt
+    # Bei Google: Felder zusammengeführt, alte Uhrzeit weg, Erinnerung und Herkunft erhalten
+    assert updated["start"] == {"date": "2026-11-06"} and updated["end"] == {"date": "2026-11-07"}
+    assert updated["reminders"]["overrides"][0]["minutes"] == 30
+    assert updated["extendedProperties"]["private"]["fkSource"] == "sprache"
+    view = from_google(updated, settings)
+    assert (view.title, view.all_day, view.location, view.persons) == ("Fußballturnier", True, "", ["lena", "max"])
+
+
+def test_loeschen_ueber_rest(gcal, server, settings):
+    created = gcal.insert_event("primary", to_google(fussball(), settings))
+    gcal.delete_event("primary", created["id"])
+    assert server.requests[-1].method == "DELETE" and server.events["primary"] == []
+    with pytest.raises(CalendarError, match="gelöscht") as exc:
+        gcal.get_event("primary", created["id"])
+    assert exc.value.status == 404

@@ -1,4 +1,4 @@
-import type { CalEvent, Draft, Me, ModelInfo, ParseResult, Settings } from "./types";
+import type { CalEvent, Draft, EditableEvent, EditScope, Me, ModelInfo, ParseResult, Settings } from "./types";
 
 /** Fehler der API mit Code (z. B. „reauth“, „model_unavailable“) und verständlicher Meldung. */
 export class ApiError extends Error {
@@ -55,5 +55,14 @@ export const api = {
   },
   parse: (text: string) => request<ParseResult>("POST", "/api/parse", { text }),
   create: (events: Draft[]) => request<{ created: CalEvent[] }>("POST", "/api/events", { events }),
+  event: (id: string, scope: EditScope) =>
+    request<EditableEvent>("GET", `/api/events/${encodeURIComponent(id)}?scope=${scope}`),
+  update: (id: string, draft: Draft, recurrenceUnchanged: boolean) =>
+    request<{ event: CalEvent }>("PUT", `/api/events/${encodeURIComponent(id)}`, {
+      draft,
+      recurrence_unchanged: recurrenceUnchanged,
+    }),
+  remove: (id: string, scope: EditScope) =>
+    request<{ ok: boolean }>("DELETE", `/api/events/${encodeURIComponent(id)}?scope=${scope}`),
   logout: () => request<{ ok: boolean }>("POST", "/auth/logout"),
 };

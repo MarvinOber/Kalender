@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import io
+import json
 import wave
 
+import httpx
+
 from app import main
+from app.calendar_api import GoogleCalendar
 from app.fake_llm import DEMO_SENTENCE
 from app.openrouter import ModelUnavailable
 
 from .conftest import ScriptedLlm
+from .test_calendar import FakeGoogleCalendarServer
 
 
 def wav_bytes(seconds: float = 0.5) -> bytes:
@@ -122,3 +127,66 @@ def test_schreiben_braucht_eigenen_header(client):
 def test_falsches_audioformat(client):
     resp = client.post("/api/voice", files={"audio": ("a.exe", b"x" * 5000, "application/octet-stream")})
     assert resp.status_code == 415
+
+
+def test_termin_bearbeiten_und_loeschen(client):
+    draft = {"title": "Fußball", "start_date": "2026-11-06", "start_time": "16:00", "persons": ["lena"],
+             "tags": ["sport"]}
+    event_id = client.post("/api/events", json={"events": [draft]}).json()["created"][0]["id"]
+
+    data = client.get(f"/api/events/{event_id}").json()
+    assert data["id"] == event_id and data["recurrence_editable"] and not data["series"]
+    loaded = data["draft"]
+    assert (loaded["start_time"], loaded["end_time"], loaded["persons"]) == ("16:00:00", "17:00:00", ["lena"])
+
+    loaded |= {"title": "Fußball (Halle)", "start_time": "15:00", "end_time": "16:30", "persons": ["lena", "max"]}
+    resp = client.put(f"/api/events/{event_id}", json={"draft": loaded})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["event"]["start"] == "2026-11-06T15:00"
+    week = client.get("/api/events", params={"start": "2026-11-02"}).json()["events"]
+    assert [(e["title"], e["end"], e["persons"]) for e in week] == [("Fußball (Halle)", "2026-11-06T16:30",
+                                                                     ["lena", "max"])]
+
+    bad = client.put(f"/api/events/{event_id}", json={"draft": loaded | {"title": " "}})
+    assert bad.status_code == 422 and "Titel fehlt" in bad.json()["message"]
+
+    assert client.delete(f"/api/events/{event_id}").json() == {"ok": True}
+    assert client.get("/api/events", params={"start": "2026-11-02"}).json()["events"] == []
+    gone = client.get(f"/api/events/{event_id}")
+    assert gone.status_code == 404 and "gelöscht" in gone.json()["message"]
+
+
+def test_serie_oder_einzelner_termin(client):
+    """Wochenansicht zeigt Vorkommen; „Ganze Serie“ wirkt auf den Serientermin, sonst nur auf das Vorkommen."""
+    server = FakeGoogleCalendarServer()
+    gcal = GoogleCalendar(lambda: "tok-1", httpx.Client(transport=httpx.MockTransport(server)))
+    main.app.dependency_overrides[main.calendar_dep] = lambda: gcal
+    master = {"id": "s1", "summary": "Schwimmen", "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=TU"],
+              "start": {"dateTime": "2026-11-03T17:00:00+01:00", "timeZone": "Europe/Berlin"},
+              "end": {"dateTime": "2026-11-03T18:00:00+01:00", "timeZone": "Europe/Berlin"}}
+    instance = {"id": "s1_20261110T160000Z", "recurringEventId": "s1", "summary": "Schwimmen",
+                "start": {"dateTime": "2026-11-10T17:00:00+01:00"}, "end": {"dateTime": "2026-11-10T18:00:00+01:00"}}
+    server.events["primary"] = [master, instance]
+
+    series = client.get("/api/events/s1_20261110T160000Z", params={"scope": "series"}).json()
+    assert series["id"] == "s1" and series["series"] and series["recurrence_editable"]
+    assert series["draft"]["start_date"] == "2026-11-03" and series["draft"]["recurrence"]["by_day"] == ["TU"]
+
+    single = client.get("/api/events/s1_20261110T160000Z").json()
+    assert single["id"] == "s1_20261110T160000Z" and not single["recurrence_editable"]
+    # Ein Vorkommen bekommt nie eine eigene Wiederholung – auch wenn der Dialog eine mitschickt
+    daily = {"freq": "daily", "interval": 1, "by_day": [], "until": None, "count": None}
+    draft = single["draft"] | {"start_time": "18:00", "end_time": "19:00", "recurrence": daily}
+    assert client.put("/api/events/s1_20261110T160000Z", json={"draft": draft}).status_code == 200
+    sent = json.loads(server.requests[-1].content)
+    assert "recurrence" not in sent and sent["start"]["dateTime"] == "2026-11-10T18:00:00"
+
+    # Serie mit unveränderter Wiederholung: Regel bleibt, wie Google sie hat
+    series_draft = series["draft"] | {"title": "Schwimmkurs"}
+    client.put("/api/events/s1", json={"draft": series_draft, "recurrence_unchanged": True})
+    assert "recurrence" not in json.loads(server.requests[-1].content)
+    assert server.events["primary"][0]["recurrence"] == ["RRULE:FREQ=WEEKLY;BYDAY=TU"]
+
+    assert client.delete("/api/events/s1_20261110T160000Z", params={"scope": "series"}).status_code == 200
+    assert server.requests[-1].method == "DELETE" and server.requests[-1].url.path.endswith("/events/s1")
+    assert [e["id"] for e in server.events["primary"]] == ["s1_20261110T160000Z"]

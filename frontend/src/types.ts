@@ -64,6 +64,17 @@ export interface Draft {
   hint: string;
 }
 
+/** „instance“ = nur dieser Termin (bei Serien: dieses Vorkommen), „series“ = die ganze Serie. */
+export type EditScope = "instance" | "series";
+
+/** Termin im Bearbeiten-Dialog; `id` ist bei der ganzen Serie die Kennung der Serie. */
+export interface EditableEvent {
+  id: string;
+  draft: Draft;
+  recurrence_editable: boolean;
+  series: boolean;
+}
+
 export interface ParseResult {
   transcript: string;
   events: Draft[];

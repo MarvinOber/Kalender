@@ -66,6 +66,20 @@ const EN: Record<string, string> = {
   "Allgemein": "General",
   "Gespeichert": "Saved",
   "Erneut anmelden": "Sign in again",
+  "Bearbeiten": "Edit",
+  "Löschen": "Delete",
+  "Zurück": "Back",
+  "Termin bearbeiten": "Edit event",
+  "Serie bearbeiten": "Edit series",
+  "Lade …": "Loading …",
+  "Nur diesen Termin": "This event only",
+  "Ganze Serie": "Whole series",
+  "Welche Termine bearbeiten?": "Which events do you want to edit?",
+  "Welche Termine löschen?": "Which events do you want to delete?",
+  "Termin wirklich löschen?": "Really delete this event?",
+  "Gelöscht": "Deleted",
+  "Diese Wiederholung lässt sich nur in Google Kalender ändern; sie bleibt unverändert.":
+    "This repeat rule can only be changed in Google Calendar; it stays as it is.",
 };
 
 let lang: "de" | "en" = "de";

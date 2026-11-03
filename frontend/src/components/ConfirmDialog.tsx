@@ -124,7 +124,7 @@ export function ConfirmDialog({ result, settings, busy, onCancel, onRetry, onRep
   );
 }
 
-function normalizeTimes(d: Draft): Draft {
+export function normalizeTimes(d: Draft): Draft {
   return { ...d, start_time: d.start_time?.slice(0, 5) ?? null, end_time: d.end_time?.slice(0, 5) ?? null };
 }
 
@@ -133,10 +133,12 @@ interface CardProps {
   settings: Settings;
   showErrors: boolean;
   onChange: (patch: Partial<Draft>) => void;
-  onRemove: () => void;
+  onRemove?: () => void;
+  /** „locked“: Serie mit Regel, die sich hier nicht abbilden lässt; „none“: einzelner Termin einer Serie. */
+  recurrence?: "edit" | "locked" | "none";
 }
 
-function DraftCard({ draft: d, settings, showErrors, onChange, onRemove }: CardProps) {
+export function DraftCard({ draft: d, settings, showErrors, onChange, onRemove, recurrence = "edit" }: CardProps) {
   const errors = showErrors ? missing(d) : {};
   const cls = (field: string) => `field ${d.uncertain.includes(field) ? "unsure" : ""} ${errors[field] ? "error" : ""}`;
   const rec = d.recurrence;
@@ -153,9 +155,11 @@ function DraftCard({ draft: d, settings, showErrors, onChange, onRemove }: CardP
           <input value={d.title} onChange={(e) => onChange({ title: e.target.value })} />
           {errors.title && <em>{errors.title}</em>}
         </label>
-        <button className="icon danger" aria-label={t("Termin entfernen")} title={t("Termin entfernen")} onClick={onRemove}>
-          🗑
-        </button>
+        {onRemove && (
+          <button className="icon danger" aria-label={t("Termin entfernen")} title={t("Termin entfernen")} onClick={onRemove}>
+            🗑
+          </button>
+        )}
       </div>
       {d.hint && <p className="hint">⚠ {d.hint}</p>}
 
@@ -249,53 +253,61 @@ function DraftCard({ draft: d, settings, showErrors, onChange, onRemove }: CardP
         </div>
       </div>
 
-      <div className={`${cls("recurrence")} recurrence`}>
-        <span>{t("Wiederholung")}</span>
-        <div className="row">
-          <select
-            value={rec?.freq ?? ""}
-            onChange={(e) => setRec(e.target.value ? { freq: e.target.value as Recurrence["freq"] } : null)}
-          >
-            <option value="">{t("keine")}</option>
-            <option value="daily">{t("täglich")}</option>
-            <option value="weekly">{t("wöchentlich")}</option>
-            <option value="monthly">{t("monatlich")}</option>
-            <option value="yearly">{t("jährlich")}</option>
-          </select>
-          {rec && (
-            <>
-              <label className="inline">
-                {t("alle")}
-                <input
-                  type="number"
-                  min={1}
-                  max={99}
-                  value={rec.interval}
-                  onChange={(e) => setRec({ interval: Math.max(1, Number(e.target.value) || 1) })}
-                />
-              </label>
-              <label className="inline">
-                {t("bis")}
-                <input type="date" value={rec.until ?? ""} onChange={(e) => setRec({ until: e.target.value || null, count: null })} />
-              </label>
-            </>
+      {recurrence === "locked" && (
+        <div className="recurrence">
+          <span>{t("Wiederholung")}</span>
+          <p className="small">{t("Diese Wiederholung lässt sich nur in Google Kalender ändern; sie bleibt unverändert.")}</p>
+        </div>
+      )}
+      {recurrence === "edit" && (
+        <div className={`${cls("recurrence")} recurrence`}>
+          <span>{t("Wiederholung")}</span>
+          <div className="row">
+            <select
+              value={rec?.freq ?? ""}
+              onChange={(e) => setRec(e.target.value ? { freq: e.target.value as Recurrence["freq"] } : null)}
+            >
+              <option value="">{t("keine")}</option>
+              <option value="daily">{t("täglich")}</option>
+              <option value="weekly">{t("wöchentlich")}</option>
+              <option value="monthly">{t("monatlich")}</option>
+              <option value="yearly">{t("jährlich")}</option>
+            </select>
+            {rec && (
+              <>
+                <label className="inline">
+                  {t("alle")}
+                  <input
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={rec.interval}
+                    onChange={(e) => setRec({ interval: Math.max(1, Number(e.target.value) || 1) })}
+                  />
+                </label>
+                <label className="inline">
+                  {t("bis")}
+                  <input type="date" value={rec.until ?? ""} onChange={(e) => setRec({ until: e.target.value || null, count: null })} />
+                </label>
+              </>
+            )}
+          </div>
+          {rec?.freq === "weekly" && (
+            <div className="weekdays">
+              {WEEKDAYS.map(([code, label]) => (
+                <button
+                  key={code}
+                  type="button"
+                  className={`chip ${rec.by_day.includes(code) ? "on" : ""}`}
+                  onClick={() => setRec({ by_day: toggle(rec.by_day, code) as Weekday[] })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           )}
         </div>
-        {rec?.freq === "weekly" && (
-          <div className="weekdays">
-            {WEEKDAYS.map(([code, label]) => (
-              <button
-                key={code}
-                type="button"
-                className={`chip ${rec.by_day.includes(code) ? "on" : ""}`}
-                onClick={() => setRec({ by_day: toggle(rec.by_day, code) as Weekday[] })}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      )}
     </article>
   );
 }

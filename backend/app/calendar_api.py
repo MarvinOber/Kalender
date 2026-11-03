@@ -14,12 +14,34 @@ from .docstore import DocStore
 from .errors import CalendarError, ReauthRequired
 
 API = "https://www.googleapis.com/calendar/v3"
+EVENT_GONE = "Termin nicht gefunden – vielleicht wurde er inzwischen gelöscht."
 
 
 class CalendarClient(Protocol):
     def list_events(self, calendar_id: str, time_min: datetime, time_max: datetime) -> list[dict[str, Any]]: ...
+    def get_event(self, calendar_id: str, event_id: str) -> dict[str, Any]: ...
     def insert_event(self, calendar_id: str, body: dict[str, Any]) -> dict[str, Any]: ...
+    def patch_event(self, calendar_id: str, event_id: str, body: dict[str, Any]) -> dict[str, Any]: ...
+    def delete_event(self, calendar_id: str, event_id: str) -> None: ...
     def list_calendars(self) -> list[dict[str, Any]]: ...
+
+
+def merge_patch(target: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    """Wie ``events.patch`` bei Google: Objekte zusammenführen, ``None`` löscht ein Feld, Listen ersetzen."""
+    out = dict(target)
+    for key, value in patch.items():
+        if value is None:
+            out.pop(key, None)
+        elif isinstance(value, dict):
+            out[key] = merge_patch(out[key] if isinstance(out.get(key), dict) else {}, value)
+        else:
+            out[key] = value
+    return out
+
+
+def _event_path(calendar_id: str, event_id: str = "") -> str:
+    path = f"/calendars/{quote(calendar_id, safe='')}/events"
+    return f"{path}/{quote(event_id, safe='')}" if event_id else path
 
 
 class GoogleCalendar:
@@ -29,7 +51,7 @@ class GoogleCalendar:
         self._token = token
         self._client = client or httpx.Client(timeout=20)
 
-    def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+    def _request(self, method: str, path: str, not_found: str = "", **kwargs: Any) -> dict[str, Any]:
         headers = {"Authorization": f"Bearer {self._token()}"}
         try:
             resp = self._client.request(method, API + path, headers=headers, **kwargs)
@@ -37,6 +59,8 @@ class GoogleCalendar:
             raise CalendarError("Google Calendar ist gerade nicht erreichbar.") from exc
         if resp.status_code == 401:
             raise ReauthRequired()
+        if not_found and resp.status_code in (404, 410):
+            raise CalendarError(not_found, 404)
         if resp.status_code in (403, 404):
             reason = _reason(resp)
             if reason in ("rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"):
@@ -54,14 +78,26 @@ class GoogleCalendar:
             "singleEvents": "true", "orderBy": "startTime", "maxResults": 250,
         }
         while True:
-            data = self._request("GET", f"/calendars/{quote(calendar_id, safe='')}/events", params=params)
+            data = self._request("GET", _event_path(calendar_id), params=params)
             items += [e for e in data.get("items", []) if e.get("status") != "cancelled"]
             if not data.get("nextPageToken"):
                 return items
             params["pageToken"] = data["nextPageToken"]
 
+    def get_event(self, calendar_id: str, event_id: str) -> dict[str, Any]:
+        event = self._request("GET", _event_path(calendar_id, event_id), not_found=EVENT_GONE)
+        if event.get("status") == "cancelled":
+            raise CalendarError(EVENT_GONE, 404)
+        return event
+
     def insert_event(self, calendar_id: str, body: dict[str, Any]) -> dict[str, Any]:
-        return self._request("POST", f"/calendars/{quote(calendar_id, safe='')}/events", json=body)
+        return self._request("POST", _event_path(calendar_id), json=body)
+
+    def patch_event(self, calendar_id: str, event_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self._request("PATCH", _event_path(calendar_id, event_id), not_found=EVENT_GONE, json=body)
+
+    def delete_event(self, calendar_id: str, event_id: str) -> None:
+        self._request("DELETE", _event_path(calendar_id, event_id), not_found=EVENT_GONE)
 
     def list_calendars(self) -> list[dict[str, Any]]:
         data = self._request("GET", "/users/me/calendarList", params={"minAccessRole": "writer"})
@@ -100,10 +136,25 @@ class LocalCalendar:
         hits = [e for e in self._events() if bounds(e)[0] < time_max and bounds(e)[1] > time_min]
         return sorted(hits, key=lambda e: bounds(e)[0])
 
+    def get_event(self, calendar_id: str, event_id: str) -> dict[str, Any]:
+        for event in self._events():
+            if event["id"] == event_id:
+                return event
+        raise CalendarError(EVENT_GONE, 404)
+
     def insert_event(self, calendar_id: str, body: dict[str, Any]) -> dict[str, Any]:
         event = {**body, "id": uuid.uuid4().hex, "htmlLink": ""}
         self._store.set(self.PATH, {"events": [*self._events(), event]})
         return event
+
+    def patch_event(self, calendar_id: str, event_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        updated = merge_patch(self.get_event(calendar_id, event_id), body)
+        self._store.set(self.PATH, {"events": [updated if e["id"] == event_id else e for e in self._events()]})
+        return updated
+
+    def delete_event(self, calendar_id: str, event_id: str) -> None:
+        self.get_event(calendar_id, event_id)
+        self._store.set(self.PATH, {"events": [e for e in self._events() if e["id"] != event_id]})
 
     def list_calendars(self) -> list[dict[str, Any]]:
         return [{"id": "primary", "summary": "Lokaler Testkalender", "primary": True}]

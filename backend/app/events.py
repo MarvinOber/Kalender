@@ -7,11 +7,11 @@ als Block am Ende der Beschreibung (Namen), damit sie auch in der Google-Kalende
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from .settings import Settings
 
@@ -182,6 +182,81 @@ def to_google(draft: EventDraft, settings: Settings) -> dict[str, Any]:
         PROP_SOURCE: "sprache",
     }}
     return body
+
+
+def to_google_patch(draft: EventDraft, settings: Settings, *, with_recurrence: bool) -> dict[str, Any]:
+    """Body für ``events.patch``: nur die Felder des Dialogs – Erinnerungen, Gäste usw. bleiben unberührt.
+
+    Geleerte Felder werden ausdrücklich geleert (``None`` bzw. ``""``), sonst behielte Google den alten Wert.
+    ``with_recurrence=False`` lässt die Wiederholung, wie sie ist (einzelner Termin einer Serie, unveränderte
+    oder im Dialog nicht abbildbare Regel).
+    """
+    body = to_google(draft, settings)
+    body["extendedProperties"]["private"].pop(PROP_SOURCE)  # Herkunft bleibt die ursprüngliche
+    other = "dateTime" if draft.all_day else "date"
+    for key in ("start", "end"):
+        body[key][other] = None
+        if draft.all_day:
+            body[key]["timeZone"] = None
+    body.setdefault("location", "")
+    body.setdefault("description", "")
+    if with_recurrence:
+        body.setdefault("recurrence", [])
+    else:
+        body.pop("recurrence", None)
+    return body
+
+
+_RRULE_KEYS = {"FREQ", "INTERVAL", "BYDAY", "UNTIL", "COUNT", "WKST"}
+
+
+def parse_recurrence(lines: list[str], tz: ZoneInfo) -> tuple[Recurrence | None, bool]:
+    """Google-Wiederholung zurück in die Felder des Dialogs: (Regel, im Dialog bearbeitbar).
+
+    Nicht abbildbar sind z. B. „jeden 2. Dienstag im Monat“ oder einzelne gestrichene Termine (EXDATE) – solche
+    Serien lassen sich weiter bearbeiten, nur die Wiederholung selbst bleibt dann unverändert.
+    """
+    if not lines:
+        return None, True
+    if len(lines) != 1 or not lines[0].startswith("RRULE:"):
+        return None, False
+    parts = dict(p.split("=", 1) for p in lines[0][6:].split(";") if "=" in p)
+    freq = parts.get("FREQ", "").lower()
+    by_day = [d for d in parts.get("BYDAY", "").split(",") if d]
+    if (not set(parts) <= _RRULE_KEYS or freq not in ("daily", "weekly", "monthly", "yearly")
+            or (by_day and (freq != "weekly" or any(d not in WEEKDAYS for d in by_day)))):
+        return None, False
+    try:
+        until = None
+        if u := parts.get("UNTIL"):
+            if "T" in u:
+                moment = datetime.strptime(u.rstrip("Z"), "%Y%m%dT%H%M%S")
+                until = moment.replace(tzinfo=UTC).astimezone(tz).date() if u.endswith("Z") else moment.date()
+            else:
+                until = datetime.strptime(u, "%Y%m%d").date()
+        rec = Recurrence(freq=freq, interval=int(parts.get("INTERVAL", 1)), by_day=by_day, until=until,
+                         count=int(parts["COUNT"]) if "COUNT" in parts else None)
+    except (ValueError, ValidationError):
+        return None, False
+    return rec, True
+
+
+def to_draft(event: dict[str, Any], settings: Settings) -> tuple[EventDraft, bool]:
+    """Google-Termin → Felder des Bearbeiten-Dialogs; zweiter Wert: Wiederholung im Dialog bearbeitbar."""
+    view = from_google(event, settings)
+    draft = EventDraft(title=event.get("summary") or "", all_day=view.all_day, location=view.location,
+                       description=view.description, persons=view.persons, tags=view.tags)
+    if view.all_day:
+        draft.start_date = date.fromisoformat(view.start)
+        last = date.fromisoformat(view.end) - timedelta(days=1)
+        draft.end_date = last if last > draft.start_date else None
+    else:
+        start, end = datetime.fromisoformat(view.start), datetime.fromisoformat(view.end)
+        draft.start_date, draft.start_time, draft.end_time = start.date(), start.time(), end.time()
+        draft.end_date = end.date() if end.date() != start.date() else None
+    draft.recurrence, editable = parse_recurrence(event.get("recurrence") or [], settings.tz)
+    # Ein einzelner Termin einer Serie hat keine eigene Wiederholung
+    return draft, editable and not event.get("recurringEventId")
 
 
 def _split(value: str | None) -> list[str]:

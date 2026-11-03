@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, File, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -18,7 +18,16 @@ from .auth import CurrentUser, User
 from .calendar_api import CalendarClient, GoogleCalendar, LocalCalendar
 from .docstore import DocStore, get_store
 from .errors import AppError, CalendarError
-from .events import DraftError, EventDraft, ViewEvent, from_google, to_google, validate_draft
+from .events import (
+    DraftError,
+    EventDraft,
+    ViewEvent,
+    from_google,
+    to_draft,
+    to_google,
+    to_google_patch,
+    validate_draft,
+)
 from .extraction import extract_events
 from .fake_llm import FakeLlm
 from .openrouter import LlmClient, OpenRouter, list_models
@@ -199,6 +208,57 @@ def create_events(body: CreateRequest, _: User = CurrentUser, settings: Settings
             raise
         created.append(from_google(event, settings))
     return {"created": [c.model_dump() for c in created]}
+
+
+# ---------- Bearbeiten und Löschen ----------
+# „instance“ = nur dieser Termin (bei Serien: dieses eine Vorkommen), „series“ = die ganze Serie.
+Scope = Literal["instance", "series"]
+
+
+def _target(calendar: CalendarClient, settings: Settings, event_id: str, scope: Scope) -> dict[str, Any]:
+    event = calendar.get_event(settings.calendar_id, event_id)
+    if scope == "series" and event.get("recurringEventId"):
+        event = calendar.get_event(settings.calendar_id, event["recurringEventId"])
+    return event
+
+
+@app.get("/api/events/{event_id}")
+def get_event(event_id: str, scope: Scope = "instance", _: User = CurrentUser,
+              settings: Settings = Depends(settings_dep),
+              calendar: CalendarClient = Depends(calendar_dep)) -> dict[str, Any]:
+    """Termin für den Bearbeiten-Dialog. ``id`` ist bei ``scope=series`` die Kennung der Serie."""
+    event = _target(calendar, settings, event_id, scope)
+    draft, recurrence_editable = to_draft(event, settings)
+    return {"id": event["id"], "draft": draft.model_dump(mode="json"),
+            "recurrence_editable": recurrence_editable, "series": bool(event.get("recurrence"))}
+
+
+class UpdateRequest(BaseModel):
+    draft: EventDraft
+    recurrence_unchanged: bool = False  # Wiederholung nicht anfassen (auch: im Dialog nicht abbildbar)
+
+
+@app.put("/api/events/{event_id}")
+def update_event(event_id: str, body: UpdateRequest, _: User = CurrentUser,
+                 settings: Settings = Depends(settings_dep),
+                 calendar: CalendarClient = Depends(calendar_dep)) -> dict[str, Any]:
+    if errors := validate_draft(body.draft, settings):
+        raise AppError(422, "invalid", "; ".join(errors))
+    event = calendar.get_event(settings.calendar_id, event_id)
+    # Ein einzelnes Vorkommen einer Serie kann keine eigene Wiederholung haben
+    with_recurrence = not body.recurrence_unchanged and not event.get("recurringEventId")
+    patch = to_google_patch(body.draft, settings, with_recurrence=with_recurrence)
+    updated = calendar.patch_event(settings.calendar_id, event_id, patch)
+    return {"event": from_google(updated, settings).model_dump()}
+
+
+@app.delete("/api/events/{event_id}")
+def delete_event(event_id: str, scope: Scope = "instance", _: User = CurrentUser,
+                 settings: Settings = Depends(settings_dep),
+                 calendar: CalendarClient = Depends(calendar_dep)) -> dict[str, Any]:
+    target = _target(calendar, settings, event_id, scope)
+    calendar.delete_event(settings.calendar_id, target["id"])
+    return {"ok": True}
 
 
 # ---------- Oberfläche (gebaute Vite-App) ----------

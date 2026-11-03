@@ -1,6 +1,7 @@
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api } from "./api";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { EditDialog } from "./components/EditDialog";
 import { EventDetails } from "./components/EventDetails";
 import { FilterBar } from "./components/FilterBar";
 import { Header } from "./components/Header";
@@ -13,7 +14,7 @@ import { addDays, mondayOf, nowIn } from "./dates";
 import { type Filter, loadFilter, matches, pruneFilter, saveFilter } from "./filter";
 import { setLanguage, t } from "./i18n";
 import { MAX_SECONDS, MicError, Recorder } from "./recorder";
-import type { CalEvent, Me, ParseResult, Settings } from "./types";
+import type { CalEvent, EditScope, Me, ParseResult, Settings } from "./types";
 
 const REFRESH_MS = 5 * 60_000; // Änderungen von anderen Geräten
 const IDLE_BACK_TO_TODAY_MS = 3 * 60_000; // Wandbetrieb: nach einer Weile zurück zur aktuellen Woche
@@ -41,6 +42,7 @@ export function App() {
   const [result, setResultState] = useState<ParseResult | null>(null);
   const [resultKey, setResultKey] = useState(0);
   const [details, setDetails] = useState<CalEvent | null>(null);
+  const [editing, setEditing] = useState<{ id: string; scope: EditScope } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reauth, setReauth] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -338,7 +340,40 @@ export function App() {
           onError={showError}
         />
       )}
-      {details && <EventDetails event={details} settings={settings} onClose={() => setDetails(null)} />}
+      {details && !editing && (
+        <EventDetails
+          event={details}
+          settings={settings}
+          onClose={() => setDetails(null)}
+          onEdit={(scope) => setEditing({ id: details.id, scope })}
+          onDeleted={() => {
+            setDetails(null);
+            setToast({ text: `„${details.title}“ ${t("Gelöscht").toLowerCase()}`, kind: "info" });
+            loadEvents();
+          }}
+          onError={showError}
+        />
+      )}
+      {editing && (
+        <EditDialog
+          eventId={editing.id}
+          scope={editing.scope}
+          settings={settings}
+          onClose={() => setEditing(null)}
+          onSaved={(event) => {
+            setEditing(null);
+            setDetails(null);
+            const week = mondayOf(event.start.slice(0, 10));
+            setToast({
+              text: t("Gespeichert"),
+              kind: "info",
+              action: week !== monday ? { label: "Anzeigen", run: () => setMonday(week) } : undefined,
+            });
+            loadEvents();
+          }}
+          onError={showError}
+        />
+      )}
       {settingsOpen && (
         <SettingsPanel
           settings={settings}

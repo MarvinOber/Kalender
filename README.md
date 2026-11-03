@@ -10,6 +10,10 @@ strukturierte Einträge verwandelt, im Dialog bestätigt und dann in einen Googl
 - **Spracheingabe**: großer Mikrofon-Knopf (gedrückt halten *oder* antippen/erneut tippen). Aufnahme im
   Browser → WAV 16 kHz mono → Backend → Transkription (OpenRouter) → Termin-Erkennung mit JSON-Schema
   (OpenRouter) → Bestätigungsdialog. Erst „Anlegen“ schreibt in Google. Daneben ein ⌨-Knopf zum Tippen.
+- **Bearbeiten und Löschen**: Termin antippen → *Bearbeiten* (dieselbe Karte wie beim Anlegen) oder *Löschen*.
+  Bei Serien wählbar: nur dieser Termin oder die ganze Serie. Geändert werden nur die Felder der Karte
+  (`events.patch`); Erinnerungen, Gäste usw. bleiben. Serien mit Regeln, die die Karte nicht abbildet (z. B.
+  „jeden 2. Dienstag“, gestrichene Einzeltermine), lassen sich bearbeiten, ihre Wiederholung bleibt aber unverändert.
 - **Tags**: Personen (mit Farbe und Zusätzen wie „Mama“, „Kinder“) und Ereignisse (Schule, Arzt, Sport …).
   Filterleiste mit Mehrfachauswahl, im Gerät gespeichert.
 - **Einstellungen** für die ganze Familie in Firestore: Kalender, beide Modelle (mit Vorschlägen aus der
