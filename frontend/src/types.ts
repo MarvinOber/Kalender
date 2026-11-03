@@ -20,6 +20,17 @@ export interface Settings {
   default_duration_min: number;
   persons: Person[];
   event_tags: EventTag[];
+  weather_place: string; // leer = kein Wetter-Icon
+  weather_lat: number;
+  weather_lon: number;
+}
+
+/** Aktuelles Wetter am Ort aus den Einstellungen; ohne Ort nur `place: ""`. */
+export interface Weather {
+  place: string;
+  temperature?: number;
+  code?: number;
+  is_day?: boolean;
 }
 
 /** Termin der Wochenansicht – Zeiten als Wanduhrzeit der Familien-Zeitzone. */

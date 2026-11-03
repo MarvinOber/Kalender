@@ -33,6 +33,7 @@ from .fake_llm import FakeLlm
 from .openrouter import LlmClient, OpenRouter, list_models
 from .server_config import get_config
 from .settings import Settings, load_settings, save_settings
+from .weather import WeatherClient, get_weather
 
 log = logging.getLogger("kalender")
 MAX_AUDIO_BYTES = 15 * 1024 * 1024
@@ -92,6 +93,10 @@ def calendar_dep(user: User = CurrentUser, store: DocStore = Depends(store_dep))
     return GoogleCalendar(lambda: auth.access_token(user.email, store, cfg))
 
 
+def weather_dep() -> WeatherClient:
+    return get_weather()
+
+
 def now_dep(settings: Settings = Depends(settings_dep)) -> datetime:
     return datetime.now(settings.tz)
 
@@ -127,6 +132,15 @@ def put_settings(body: dict[str, Any], _: User = CurrentUser, store: DocStore = 
 @app.get("/api/models")
 def models(_: User = CurrentUser) -> dict[str, Any]:
     return {"models": list_models()}
+
+
+@app.get("/api/weather")
+def weather(_: User = CurrentUser, settings: Settings = Depends(settings_dep),
+            client: WeatherClient = Depends(weather_dep)) -> dict[str, Any]:
+    place = settings.weather_place.strip()
+    if not place:
+        return {"place": ""}
+    return {"place": place, **client.current(settings.weather_lat, settings.weather_lon)}
 
 
 @app.get("/api/calendars")

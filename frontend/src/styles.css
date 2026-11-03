@@ -72,10 +72,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 
 .header .nav, .header .tools { display: flex; align-items: center; gap: 8px; }
+.header .views { display: flex; gap: 4px; margin-left: 8px; }
 .header .title { display: flex; flex-direction: column; align-items: center; line-height: 1.15; text-align: center; }
 .header .week-no { font-size: 0.85rem; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 .header .range { font-size: 1.45rem; font-weight: 700; }
 .header .clock { font-size: 1.9rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-right: 8px; }
+.header .weather { display: inline-flex; align-items: center; gap: 4px; font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
 
 .btn {
   display: inline-flex;
@@ -287,6 +289,53 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .now-row::before { content: ""; position: absolute; left: -6px; top: -8px; width: 13px; height: 13px; border-radius: 50%; background: var(--now); }
 .empty { color: var(--muted); font-size: 0.95rem; }
 
+/* Monatsübersicht – Höhen von .month-day und .month-ev stehen auch in MonthView.tsx */
+.month { height: 100%; display: flex; flex-direction: column; }
+.month-head { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-bottom: 2px solid var(--line-strong); }
+.month-head .wd { text-align: center; padding: 4px 0 6px; font-size: 1.05rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.month-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.month-cell {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0 3px 3px;
+  border-left: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.month-cell:nth-child(7n + 1) { border-left: none; }
+.month-cell.today { background: var(--today); }
+.month-cell.past { background: var(--past); }
+.month-cell.other .month-day, .month-cell.other .month-ev { opacity: 0.45; }
+.month-day {
+  flex: none;
+  height: 1.45rem;
+  display: flex;
+  align-items: center;
+  border: none;
+  background: none;
+  padding: 0 4px;
+  cursor: pointer;
+}
+.month-day .dn { white-space: nowrap; font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.month-cell.today .month-day .dn { background: var(--now); color: #fff; border-radius: 999px; padding: 0 0.45em; }
+.ev.month-ev {
+  flex: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  height: 1.3rem;
+  padding: 0 4px 0 9px;
+  border-radius: 5px;
+}
+.ev.month-ev::before { width: 4px; }
+.month-ev .ev-time { font-size: 0.75rem; flex: none; }
+.month-ev .ev-title { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ev.month-ev.full { background: var(--c); color: #fff; }
+.ev.month-ev.full::before { background: var(--stripes, var(--c)); filter: brightness(0.8); }
+.month-more { flex: none; height: 1rem; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: none; background: none; padding: 0 4px; text-align: left; font-size: 0.8rem; font-weight: 600; color: var(--muted); cursor: pointer; }
+
 /* ---------- Mikrofon ---------- */
 
 .mic-wrap {
@@ -482,8 +531,16 @@ input[type="color"] { width: 2.6rem; height: 2.6rem; border: none; padding: 0; b
 @media (max-width: 700px) {
   .header { flex-wrap: wrap; }
   .header .title { order: 3; width: 100%; }
+  .header .nav { flex-wrap: wrap; }
+  .header .views { margin-left: 0; }
+  .day-head { flex-direction: column; align-items: center; gap: 0; }
+  .day-head .wd { font-size: 0.75rem; }
+  .day-head .dn { font-size: 1.2rem; }
+  .month-head .wd { font-size: 0.75rem; }
+  .month-ev .ev-time { display: none; }
   .header .range { font-size: 1.15rem; }
   .header .clock { font-size: 1.4rem; }
+  .header .weather { font-size: 1.1rem; }
   .agenda-ev { grid-template-columns: 1fr; }
   .agenda-ev .ev-meta { grid-column: 1; }
   .row.item { flex-wrap: wrap; }

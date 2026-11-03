@@ -1,4 +1,4 @@
-import type { CalEvent, Draft, EditableEvent, EditScope, Me, ModelInfo, ParseResult, Settings } from "./types";
+import type { CalEvent, Draft, EditableEvent, EditScope, Me, ModelInfo, ParseResult, Settings, Weather } from "./types";
 
 /** Fehler der API mit Code (z. B. „reauth“, „model_unavailable“) und verständlicher Meldung. */
 export class ApiError extends Error {
@@ -40,6 +40,7 @@ export const api = {
   me: () => request<Me>("GET", "/api/me"),
   settings: () => request<Settings>("GET", "/api/settings"),
   saveSettings: (s: Settings) => request<Settings>("PUT", "/api/settings", s),
+  weather: () => request<Weather>("GET", "/api/weather"),
   models: () => request<{ models: ModelInfo[] }>("GET", "/api/models"),
   calendars: () =>
     request<{ calendars: { id: string; summary: string; primary: boolean }[] }>("GET", "/api/calendars"),

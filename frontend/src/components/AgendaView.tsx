@@ -14,7 +14,7 @@ interface Props {
   onSelect: (e: CalEvent) => void;
 }
 
-/** Hochformat: die Woche als Liste, ein Abschnitt je Tag – sieben schmale Spalten wären aus 3 m nicht lesbar. */
+/** Ansicht „Termine“: die Woche als Liste, ein Abschnitt je Tag – gut lesbar auch im Hochformat. */
 export function AgendaView({ events, monday, today, nowMinutes, settings, onSelect }: Props) {
   const segments = timedSegments(events, monday);
   const bars = allDayBars(events, monday);

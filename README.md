@@ -3,10 +3,12 @@
 Wochenkalender für ein Tablet oder einen Bildschirm an der Wand. Termine werden eingesprochen, von einer KI in
 strukturierte Einträge verwandelt, im Dialog bestätigt und dann in einen Google-Kalender geschrieben.
 
-- **Wochenansicht** Mo–So aus Google Calendar (eigene Darstellung über die Calendar API), Pfeile, „Heute“,
-  Linie für die aktuelle Uhrzeit, ganztägige Termine oben, Farben je Person. Querformat: Zeitraster ohne
-  Scrollen; Hochformat: Tagesliste. Aktualisierung alle 5 Minuten und beim Aufwachen des Geräts; nach
-  3 Minuten ohne Bedienung springt die Anzeige zurück zur aktuellen Woche. Wischen blättert.
+- **Drei Ansichten**, umschaltbar im Kopf, Standard *Woche* (die Wahl bleibt im Gerät gespeichert):
+  *Termine* – die Woche als Tagesliste; *Woche* – Zeitraster Mo–So ohne Scrollen, ganztägige Termine oben,
+  Linie für die aktuelle Uhrzeit; *Monat* – volle Wochen Mo–So, je Tag so viele Termine wie hineinpassen,
+  sonst „+n weitere“ (Tippen auf Tag oder „+n“ öffnet dessen Woche). Eigene Darstellung über die Calendar API,
+  Farben je Person. Pfeile und Wischen blättern Woche bzw. Monat, „Heute“ springt zurück. Aktualisierung alle
+  5 Minuten und beim Aufwachen des Geräts; nach 3 Minuten ohne Bedienung springt die Anzeige zurück zu heute.
 - **Spracheingabe**: großer Mikrofon-Knopf (gedrückt halten *oder* antippen/erneut tippen). Aufnahme im
   Browser → WAV 16 kHz mono → Backend → Transkription (OpenRouter) → Termin-Erkennung mit JSON-Schema
   (OpenRouter) → Bestätigungsdialog. Erst „Anlegen“ schreibt in Google. Daneben ein ⌨-Knopf zum Tippen.
@@ -16,6 +18,8 @@ strukturierte Einträge verwandelt, im Dialog bestätigt und dann in einen Googl
   „jeden 2. Dienstag“, gestrichene Einzeltermine), lassen sich bearbeiten, ihre Wiederholung bleibt aber unverändert.
 - **Tags**: Personen (mit Farbe und Zusätzen wie „Mama“, „Kinder“) und Ereignisse (Schule, Arzt, Sport …).
   Filterleiste mit Mehrfachauswahl, im Gerät gespeichert.
+- **Wetter**: kleines Icon mit Temperatur neben der Uhr (Open-Meteo, ohne Schlüssel, über das Backend und dort
+  15 Minuten zwischengespeichert). Ort und Koordinaten in den Einstellungen; ohne Ort kein Icon.
 - **Einstellungen** für die ganze Familie in Firestore: Kalender, beide Modelle (mit Vorschlägen aus der
   OpenRouter-Modellliste), Personen, Ereignis-Tags, Sprache, Zeitzone, Standarddauer. Wirkt beim nächsten
   Aufruf – kein Deployment.
@@ -56,6 +60,7 @@ Browser (Tablet) ──HTTPS──▶ Cloud Run „kalender“ (ein Image)
 | `backend/app/events.py` | Entwurf ↔ Google-Termin ↔ Anzeige, Tags, Wiederholung (RRULE) |
 | `backend/app/calendar_api.py` | Google Calendar über REST, lokale Attrappe |
 | `backend/app/openrouter.py` | OpenRouter-Aufrufe, Modellliste (24 Std im Speicher) |
+| `backend/app/weather.py` | aktuelles Wetter von Open-Meteo, 15 Min im Speicher |
 | `backend/app/settings.py` | Einstellungen der Familie (Firestore-Dokument `config/settings`) |
 | `frontend/src/` | React 18 + TypeScript + Vite |
 | `scripts/deploy.ps1` | Einrichtung und Deployment (idempotent) |
@@ -118,7 +123,9 @@ npm test
 - `test_api.py` – Abnahme Ende zu Ende (einsprechen → bestätigen → Wochenansicht, Filter „Lena“),
   Modellwechsel ohne Deployment, nichts erkannt, Modell nicht erreichbar, CSRF-Schutz.
 - `test_auth.py` – Token-Erneuerung, abgelaufenes Token → neue Anmeldung, Pflichtangaben im Cloud-Betrieb.
-- `frontend/src/logic.test.ts` – Wochenrechnung, Filter, Überschneidungen, ganztägige Balken.
+- `test_weather.py` – Open-Meteo-Abruf (Attrappe), Zwischenspeicher mit Rückfall auf den letzten Stand, Ort aus
+  den Einstellungen.
+- `frontend/src/logic.test.ts` – Wochenrechnung, Filter, Überschneidungen, ganztägige Balken, Wettersymbole.
 - `test_extraction_live.py` – dieselben Sätze gegen das echte Modell (nur auf Wunsch, kostet Cent-Beträge):
 
 ```powershell
@@ -244,5 +251,10 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | Wochentag ohne Zusatz und „nächsten Freitag“ = nächstes Vorkommen nach heute | häufigste Lesart; im Dialog änderbar. |
 | Keine Uhrzeit → ganztägig nur bei Tagesereignissen (Geburtstag, Ferien), sonst Feld markiert | Auftrag: „markieren statt raten“. |
 | Modellliste 24 Std im Arbeitsspeicher statt Cloud Storage | Baukasten 2.8 nutzt Cloud Storage; bei einem Dienst ohne Bucket reicht der Speicher. |
+| Wetter für Bokel im Kreis Pinneberg (53,867 N, 9,733 O) | Es gibt über zehn Orte namens Bokel; dieser liegt am nächsten an Hamburg. In den Einstellungen änderbar. |
+| Wetter von Open-Meteo über das Backend | frei und ohne Schlüssel; ein Abruf für alle Geräte, Fehler lassen den letzten Stand stehen. |
 | Filter: innerhalb einer Gruppe *oder*, zwischen Personen und Ereignissen *und* | übliche Mehrfachfilter-Logik. |
+| Ansicht wählt die Familie, nicht mehr die Ausrichtung des Geräts; Standard *Woche*, Wahl je Gerät in `localStorage` | Auftrag „Default Woche“; gespeichert wie der Filter, damit das Wand-Tablet nach einem Neustart gleich bleibt. |
+| *Termine* zeigt dieselbe Woche wie *Woche*, nur als Liste | bisherige Tagesliste weiterverwendet; Blättern und „Heute“ verhalten sich in beiden gleich. |
+| Monat: Termine je Tag als Zeile, mehrtägige an jedem Tag einzeln; Tippen auf den Tag öffnet die Woche | lesbar in schmalen Zellen ohne Balkenlogik über Zellgrenzen; Details stehen in der Wochenansicht. |
 | Lokale Kalender-Attrappe zeigt Serien nur mit dem ersten Termin | Google expandiert Serien selbst (`singleEvents=true`); die Attrappe dient nur der Entwicklung. |

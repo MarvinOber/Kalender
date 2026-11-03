@@ -90,6 +90,10 @@ class Settings(BaseModel):
     default_duration_min: int = Field(default=60, ge=5, le=24 * 60)
     persons: list[Person] = Field(default_factory=list)
     event_tags: list[EventTag] = Field(default_factory=list)
+    # Wetter-Icon in der Kopfzeile; leerer Ort blendet es aus. Bokel im Kreis Pinneberg (es gibt mehrere Bokel)
+    weather_place: str = Field(default="Bokel", max_length=60)
+    weather_lat: float = Field(default=53.86667, ge=-90, le=90)
+    weather_lon: float = Field(default=9.73333, ge=-180, le=180)
 
     @field_validator("calendar_id", "transcription_model", "extraction_model")
     @classmethod

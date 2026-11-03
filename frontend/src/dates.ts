@@ -22,6 +22,17 @@ export function mondayOf(iso: string): string {
   return addDays(iso, -weekdayIndex(iso));
 }
 
+export function firstOfMonth(iso: string): string {
+  return `${iso.slice(0, 7)}-01`;
+}
+
+/** Erster Tag des Monats, der `months` Monate weiter liegt. */
+export function addMonths(iso: string, months: number): string {
+  const d = utc(firstOfMonth(iso));
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d.toISOString().slice(0, 10);
+}
+
 export function daysBetween(a: string, b: string): number {
   return Math.round((utc(b).getTime() - utc(a).getTime()) / DAY_MS);
 }

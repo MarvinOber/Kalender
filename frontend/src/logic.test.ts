@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { addDays, isoWeek, mondayOf, nowIn } from "./dates";
+import { addDays, addMonths, isoWeek, mondayOf, nowIn } from "./dates";
 import { matches, pruneFilter } from "./filter";
-import { allDayBars, timedSegments, visibleHours } from "./layout";
+import { allDayBars, dayItems, timedSegments, visibleHours } from "./layout";
 import type { CalEvent } from "./types";
+import { inRange, rangeOf, samePeriod, step } from "./view";
+import { weatherSymbol } from "./weather";
 
 const ev = (p: Partial<CalEvent>): CalEvent => ({
   id: p.id ?? Math.random().toString(36),
@@ -95,5 +97,65 @@ describe("Layout", () => {
       ["x", 1, 1, 1],
       ["oma", 5, 1, 0],
     ]);
+  });
+});
+
+describe("Wetter", () => {
+  it("ordnet WMO-Codes Symbolen zu, nachts mit Mond", () => {
+    expect(weatherSymbol(0, true)).toEqual({ icon: "☀️", label: "Klar" });
+    expect(weatherSymbol(0, false).icon).toBe("🌙");
+    expect(weatherSymbol(3, true).label).toBe("Bedeckt");
+    expect(weatherSymbol(63, true).label).toBe("Regen");
+    expect(weatherSymbol(67, true).label).toBe("Gefrierender Regen");
+    expect(weatherSymbol(81, true).label).toBe("Regenschauer");
+    expect(weatherSymbol(75, true).label).toBe("Schnee");
+    expect(weatherSymbol(96, true).label).toBe("Gewitter");
+    expect(weatherSymbol(42, true).label).toBe("Wetter");
+  });
+});
+
+describe("Ansicht", () => {
+  it("Woche ab Montag, Monat in vollen Wochen", () => {
+    expect(rangeOf("week", "2026-11-05")).toEqual({ start: "2026-11-02", days: 7 });
+    expect(rangeOf("list", "2026-11-05")).toEqual({ start: "2026-11-02", days: 7 });
+    // November 2026: Sonntag, 1. bis Montag, 30. – sechs Wochen
+    expect(rangeOf("month", "2026-11-17")).toEqual({ start: "2026-10-26", days: 42 });
+    // Februar 2027: Montag, 1. bis Sonntag, 28. – genau vier Wochen
+    expect(rangeOf("month", "2027-02-10")).toEqual({ start: "2027-02-01", days: 28 });
+  });
+
+  it("blättert Woche und Monat", () => {
+    expect(step("week", "2026-11-05", 1)).toBe("2026-11-09");
+    expect(step("month", "2026-11-17", 1)).toBe("2026-12-01");
+    expect(step("month", "2026-01-31", -1)).toBe("2025-12-01");
+    expect(addMonths("2026-12-15", 2)).toBe("2027-02-01");
+  });
+
+  it("erkennt den aktuellen Zeitraum", () => {
+    expect(samePeriod("week", "2026-11-02", "2026-11-08")).toBe(true);
+    expect(samePeriod("week", "2026-11-08", "2026-11-09")).toBe(false);
+    expect(samePeriod("month", "2026-11-01", "2026-11-30")).toBe(true);
+    expect(inRange(rangeOf("month", "2026-11-01"), "2026-12-06T10:00")).toBe(true);
+    expect(inRange(rangeOf("month", "2026-11-01"), "2026-12-07")).toBe(false);
+  });
+
+  it("verteilt Termine auf die Tage des Monats", () => {
+    const days = dayItems(
+      [
+        ev({ id: "abend", start: "2026-11-03T18:00", end: "2026-11-03T19:00" }),
+        ev({ id: "frueh", start: "2026-11-03T08:00", end: "2026-11-03T09:00" }),
+        ev({ id: "ferien", all_day: true, start: "2026-11-02", end: "2026-11-05" }),
+        ev({ id: "nacht", start: "2026-11-04T22:00", end: "2026-11-05T00:00" }),
+        ev({ id: "vorher", start: "2026-10-20T10:00", end: "2026-10-20T11:00" }),
+      ],
+      "2026-10-26",
+      42,
+    );
+    const ids = (d: number) => days[d].map((x) => x.event.id);
+    expect(ids(7)).toEqual(["ferien"]);
+    expect(ids(8)).toEqual(["ferien", "frueh", "abend"]);
+    expect(ids(9)).toEqual(["ferien", "nacht"]);
+    expect(ids(10)).toEqual([]);
+    expect(days.flat().some((x) => x.event.id === "vorher")).toBe(false);
   });
 });

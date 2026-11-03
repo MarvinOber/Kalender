@@ -225,6 +225,25 @@ export function SettingsPanel({ settings, me, onClose, onSaved, onError }: Props
             </div>
           </section>
 
+          <section>
+            <h3>{t("Wetter")}</h3>
+            <div className="row">
+              <label className="field grow">
+                <span>{t("Ort")}</span>
+                <input value={s.weather_place} placeholder="Bokel" onChange={(e) => setS({ ...s, weather_place: e.target.value })} />
+              </label>
+              <label className="field">
+                <span>{t("Breite")}</span>
+                <input type="number" step="any" min={-90} max={90} value={s.weather_lat} onChange={(e) => setS({ ...s, weather_lat: Number(e.target.value) })} />
+              </label>
+              <label className="field">
+                <span>{t("Länge")}</span>
+                <input type="number" step="any" min={-180} max={180} value={s.weather_lon} onChange={(e) => setS({ ...s, weather_lon: Number(e.target.value) })} />
+              </label>
+            </div>
+            <p className="small">Koordinaten des Ortes, z. B. aus Google Maps. Ohne Ort wird kein Wetter angezeigt.</p>
+          </section>
+
           {me && (
             <section className="account">
               <span>

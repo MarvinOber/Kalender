@@ -99,6 +99,32 @@ export function allDayBars(events: CalEvent[], monday: string): AllDayBar[] {
   return bars;
 }
 
+export interface DayItem {
+  event: CalEvent;
+  allDay: boolean;
+  continuesBefore: boolean;
+}
+
+/** Monatsübersicht: Termine je Tag ab `start`, mehrtägige an jedem Tag; ganztägige zuerst, dann nach Uhrzeit. */
+export function dayItems(events: CalEvent[], start: string, days: number): DayItem[][] {
+  const result: { item: DayItem; sort: string }[][] = Array.from({ length: days }, () => []);
+  for (const event of events) {
+    const startDay = daysBetween(start, event.start);
+    let endDay: number;
+    if (event.all_day) endDay = daysBetween(start, addDays(event.end, -1));
+    else {
+      endDay = daysBetween(start, event.end);
+      if (endDay > startDay && minutesOf(event.end) === 0) endDay--; // endet genau um Mitternacht
+    }
+    for (let d = Math.max(0, startDay); d <= Math.min(days - 1, endDay); d++) {
+      const continuesBefore = d > startDay;
+      const sort = event.all_day ? `0${event.start}` : `1${continuesBefore ? "00:00" : event.start.slice(11, 16)}`;
+      result[d].push({ item: { event, allDay: event.all_day, continuesBefore }, sort });
+    }
+  }
+  return result.map((list) => list.sort((a, b) => a.sort.localeCompare(b.sort)).map((x) => x.item));
+}
+
 /** Sichtbarer Stundenbereich: mindestens 7–21 Uhr, erweitert um frühere oder spätere Termine. */
 export function visibleHours(days: Segment[][], from = 7, to = 21): [number, number] {
   let first = from;

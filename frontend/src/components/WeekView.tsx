@@ -13,7 +13,7 @@ interface Props {
   onSelect: (e: CalEvent) => void;
 }
 
-/** Querformat: sieben Spalten Mo–So, ganztägige Termine oben, Zeitraster ohne Scrollen. */
+/** Ansicht „Woche“: sieben Spalten Mo–So, ganztägige Termine oben, Zeitraster ohne Scrollen. */
 export function WeekView({ events, monday, today, nowMinutes, settings, onSelect }: Props) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const segments = timedSegments(events, monday);

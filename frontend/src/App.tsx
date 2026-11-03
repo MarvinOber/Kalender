@@ -9,15 +9,17 @@ import { LoginScreen } from "./components/LoginScreen";
 import { MicButton, type MicState } from "./components/MicButton";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { AgendaView } from "./components/AgendaView";
+import { MonthView } from "./components/MonthView";
 import { WeekView } from "./components/WeekView";
-import { addDays, mondayOf, nowIn } from "./dates";
+import { nowIn } from "./dates";
 import { type Filter, loadFilter, matches, pruneFilter, saveFilter } from "./filter";
 import { setLanguage, t } from "./i18n";
 import { MAX_SECONDS, MicError, Recorder } from "./recorder";
-import type { CalEvent, EditScope, Me, ParseResult, Settings } from "./types";
+import type { CalEvent, EditScope, Me, ParseResult, Settings, Weather } from "./types";
+import { type View, inRange, loadView, rangeOf, samePeriod, saveView, step } from "./view";
 
 const REFRESH_MS = 5 * 60_000; // Änderungen von anderen Geräten
-const IDLE_BACK_TO_TODAY_MS = 3 * 60_000; // Wandbetrieb: nach einer Weile zurück zur aktuellen Woche
+const IDLE_BACK_TO_TODAY_MS = 3 * 60_000; // Wandbetrieb: nach einer Weile zurück zu heute
 
 interface Toast {
   text: string;
@@ -29,13 +31,14 @@ export function App() {
   const [auth, setAuth] = useState<"loading" | "login" | "ok">("loading");
   const [me, setMe] = useState<Me | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [weather, setWeather] = useState<Weather | null>(null);
   const [now, setNow] = useState(() => nowIn("Europe/Berlin"));
-  const [monday, setMonday] = useState(() => mondayOf(nowIn("Europe/Berlin").date));
+  const [view, setView] = useState<View>(loadView);
+  const [anchor, setAnchor] = useState(() => nowIn("Europe/Berlin").date); // ein Tag im angezeigten Zeitraum
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [fetchedAt, setFetchedAt] = useState("");
   const [stale, setStale] = useState(false);
   const [filter, setFilter] = useState<Filter>(loadFilter);
-  const [portrait, setPortrait] = useState(() => window.matchMedia("(orientation: portrait)").matches);
   const [mic, setMic] = useState<MicState>("idle");
   const [level, setLevel] = useState(0);
   const [seconds, setSeconds] = useState(0);
@@ -57,6 +60,8 @@ export function App() {
 
   const tz = settings?.timezone || "Europe/Berlin";
   const today = now.date;
+  const range = rangeOf(view, anchor);
+  const requestNo = useRef(0);
 
   const showError = useCallback((err: unknown) => {
     if (err instanceof ApiError) {
@@ -90,17 +95,25 @@ export function App() {
   }, []);
 
   const loadEvents = useCallback(async () => {
+    const no = ++requestNo.current; // beim schnellen Blättern gilt nur die letzte Antwort
     try {
-      const data = await api.events(monday);
+      const data = await api.events(range.start, range.days);
+      if (no !== requestNo.current) return;
       setEvents(data.events);
       setFetchedAt(data.fetched_at.slice(11, 16));
       setStale(false);
       setReauth(false);
     } catch (err) {
+      if (no !== requestNo.current) return;
       setStale(true);
       showError(err);
     }
-  }, [monday, showError]);
+  }, [range.start, range.days, showError]);
+
+  // Wetter ist Beiwerk: Fehler bleiben still, der letzte Stand bleibt stehen
+  const loadWeather = useCallback(() => {
+    api.weather().then(setWeather).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (auth === "ok") loadSettings().catch(showError);
@@ -110,12 +123,17 @@ export function App() {
     if (auth === "ok" && settings) loadEvents();
   }, [auth, settings?.calendar_id, settings?.timezone, loadEvents]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (auth === "ok" && settings) loadWeather();
+  }, [auth, settings?.weather_place, settings?.weather_lat, settings?.weather_lon, loadWeather]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Regelmäßig neu laden – und sofort, wenn das Gerät wieder aufwacht
   useEffect(() => {
     if (auth !== "ok") return;
     const refresh = () => {
       loadSettings().catch(() => undefined);
       loadEvents();
+      loadWeather();
     };
     const id = window.setInterval(refresh, REFRESH_MS);
     const onVisible = () => document.visibilityState === "visible" && refresh();
@@ -124,29 +142,32 @@ export function App() {
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [auth, loadEvents, loadSettings]);
+  }, [auth, loadEvents, loadSettings, loadWeather]);
 
-  // Uhr und Wochenwechsel um Mitternacht
+  // Uhr; um Mitternacht wandert die Anzeige mit, wenn sie den heutigen Tag zeigt
   useEffect(() => {
     const tick = () =>
       setNow((prev) => {
         const next = nowIn(tz);
-        if (next.date !== prev.date) setMonday((m) => (m === mondayOf(prev.date) ? mondayOf(next.date) : m));
+        if (next.date !== prev.date) setAnchor((a) => (samePeriod(view, a, prev.date) ? next.date : a));
         return next;
       });
     tick();
     const id = window.setInterval(tick, 20_000);
     return () => window.clearInterval(id);
-  }, [tz]);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(orientation: portrait)");
-    const onChange = () => setPortrait(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
+  }, [tz, view]);
 
   useEffect(() => saveFilter(filter), [filter]);
+  useEffect(() => saveView(view), [view]);
+
+  // Zeigt die Ansicht gerade heute, bleibt es beim Wechsel bei heute; sonst beim Anfang des geblätterten Zeitraums
+  const changeView = useCallback(
+    (v: View) => {
+      if (samePeriod(view, anchor, today)) setAnchor(today);
+      setView(v);
+    },
+    [view, anchor, today],
+  );
 
   // Bildschirm an der Wand wach halten (wo der Browser es kann)
   useEffect(() => {
@@ -167,22 +188,23 @@ export function App() {
     };
   }, []);
 
-  // Nach einer Weile ohne Bedienung zurück zur aktuellen Woche
+  // Nach einer Weile ohne Bedienung zurück zu heute (die gewählte Ansicht bleibt)
   const touch = useCallback(() => {
     window.clearTimeout(idleTimer.current);
-    idleTimer.current = window.setTimeout(() => setMonday(mondayOf(nowIn(tz).date)), IDLE_BACK_TO_TODAY_MS);
+    idleTimer.current = window.setTimeout(() => setAnchor(nowIn(tz).date), IDLE_BACK_TO_TODAY_MS);
   }, [tz]);
 
+  const isCurrent = samePeriod(view, anchor, today);
   useEffect(() => {
     if (auth !== "ok") return;
-    if (monday === mondayOf(today)) return;
+    if (isCurrent) return;
     window.addEventListener("pointerdown", touch);
     touch();
     return () => {
       window.removeEventListener("pointerdown", touch);
       window.clearTimeout(idleTimer.current);
     };
-  }, [auth, monday, today, touch]);
+  }, [auth, isCurrent, touch]);
 
   // ---------- Spracheingabe ----------
   useEffect(() => {
@@ -254,15 +276,14 @@ export function App() {
       setResult(null);
       const first = list.map((e) => e.start.slice(0, 10)).sort()[0];
       const text = list.length === 1 ? `„${list[0].title}“ angelegt` : `${list.length} Termine angelegt`;
-      const targetWeek = first ? mondayOf(first) : monday;
       setToast({
         text,
         kind: "info",
-        action: targetWeek !== monday ? { label: "Anzeigen", run: () => setMonday(targetWeek) } : undefined,
+        action: first && !inRange(range, first) ? { label: "Anzeigen", run: () => setAnchor(first) } : undefined,
       });
       loadEvents();
     },
-    [loadEvents, monday, setResult],
+    [loadEvents, range.start, range.days, setResult], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // ---------- Anzeige ----------
@@ -279,14 +300,18 @@ export function App() {
   if (!settings) return <div className="splash">Familienkalender …</div>;
 
   return (
-    <div className={`app ${portrait ? "portrait" : "landscape"}`}>
+    <div className="app">
       <Header
-        monday={monday}
-        today={today}
+        view={view}
+        range={range}
+        month={anchor.slice(0, 7)}
+        isCurrent={isCurrent}
         time={now.time}
-        onPrev={() => setMonday(addDays(monday, -7))}
-        onNext={() => setMonday(addDays(monday, 7))}
-        onToday={() => setMonday(mondayOf(today))}
+        weather={weather}
+        onPrev={() => setAnchor(step(view, anchor, -1))}
+        onNext={() => setAnchor(step(view, anchor, 1))}
+        onToday={() => setAnchor(today)}
+        onView={changeView}
         onSettings={() => setSettingsOpen(true)}
       />
       <FilterBar settings={settings} filter={filter} onChange={setFilter} />
@@ -301,12 +326,27 @@ export function App() {
       <main
         className="calendar"
         onPointerDown={swipeStart}
-        onPointerUp={(e) => swipeEnd(e, (dir) => setMonday(addDays(monday, dir * 7)))}
+        onPointerUp={(e) => swipeEnd(e, (dir) => setAnchor(step(view, anchor, dir)))}
       >
-        {portrait ? (
-          <AgendaView events={visible} monday={monday} today={today} nowMinutes={now.minutes} settings={settings} onSelect={setDetails} />
-        ) : (
-          <WeekView events={visible} monday={monday} today={today} nowMinutes={now.minutes} settings={settings} onSelect={setDetails} />
+        {view === "list" && (
+          <AgendaView events={visible} monday={range.start} today={today} nowMinutes={now.minutes} settings={settings} onSelect={setDetails} />
+        )}
+        {view === "week" && (
+          <WeekView events={visible} monday={range.start} today={today} nowMinutes={now.minutes} settings={settings} onSelect={setDetails} />
+        )}
+        {view === "month" && (
+          <MonthView
+            events={visible}
+            range={range}
+            month={anchor.slice(0, 7)}
+            today={today}
+            settings={settings}
+            onSelect={setDetails}
+            onDay={(d) => {
+              setAnchor(d);
+              setView("week");
+            }}
+          />
         )}
       </main>
       <footer className="footer">
@@ -363,11 +403,11 @@ export function App() {
           onSaved={(event) => {
             setEditing(null);
             setDetails(null);
-            const week = mondayOf(event.start.slice(0, 10));
+            const day = event.start.slice(0, 10);
             setToast({
               text: t("Gespeichert"),
               kind: "info",
-              action: week !== monday ? { label: "Anzeigen", run: () => setMonday(week) } : undefined,
+              action: !inRange(range, day) ? { label: "Anzeigen", run: () => setAnchor(day) } : undefined,
             });
             loadEvents();
           }}
@@ -411,7 +451,7 @@ export function App() {
   );
 }
 
-// Wischen über den Kalender blättert die Woche
+// Wischen über den Kalender blättert Woche bzw. Monat
 let swipe: { x: number; y: number; t: number } | null = null;
 
 function swipeStart(e: ReactPointerEvent) {
