@@ -1,6 +1,11 @@
 /* Familienkalender – gut lesbar aus 2–3 m, Touch-Bedienung, Hoch- und Querformat. */
 
-:root {
+/* Grundschrift wächst mit dem Bildschirm: 18 px am Tablet, bis 26 px am großen Bildschirm */
+:root { font-size: clamp(16px, 0.6vw + 0.75vh + 6px, 26px); }
+
+/* Stil „Klassisch“ (Standard). Die übrigen Stile stehen am Ende der Datei und setzen dieselben Variablen;
+   gewählt wird je Gerät über data-style an <html> (style.ts). */
+:root, [data-style="klassisch"] {
   --bg: #f6f4ef;
   --panel: #ffffff;
   --text: #1d2125;
@@ -16,13 +21,17 @@
   --past: rgba(0, 0, 0, 0.025);
   --shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
   --radius: 12px;
-  /* Grundschrift wächst mit dem Bildschirm: 18 px am Tablet, bis 26 px am großen Bildschirm */
-  font-size: clamp(16px, 0.6vw + 0.75vh + 6px, 26px);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ev-radius: 8px; /* Ecken der Termine */
+  --ev-tint: 22%; /* Anteil der Personenfarbe im Hintergrund eines Termins mit Uhrzeit */
+  --ev-bar: 6px; /* Farbstreifen links am Termin */
+  --today-mark: #e03131; /* Hintergrund der heutigen Tageszahl */
+  --on-mark: #ffffff;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-style]), [data-style="klassisch"] {
     --bg: #15171a;
     --panel: #1f2226;
     --text: #eceef0;
@@ -44,7 +53,7 @@ html, body, #root { height: 100%; margin: 0; }
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
@@ -195,14 +204,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .day-head .wd { font-size: 1.05rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
 .day-head .dn { font-size: 1.6rem; font-weight: 700; }
 .day-head.today .dn {
-  background: var(--now);
-  color: #fff;
+  background: var(--today-mark);
+  color: var(--on-mark);
   border-radius: 999px;
   min-width: 2.2em;
   text-align: center;
   padding: 0 0.3em;
 }
-.day-head.today .wd { color: var(--now); }
+.day-head.today .wd { color: var(--today-mark); }
 .day-head.past { opacity: 0.6; }
 
 .allday { position: relative; gap: 3px 0; padding: 3px 0; border-bottom: 2px solid var(--line-strong); min-height: 2.2rem; }
@@ -247,14 +256,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
   text-align: left;
   overflow: hidden;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--ev-radius);
   padding: 3px 6px 3px 12px;
-  background: color-mix(in srgb, var(--c) 22%, var(--panel));
+  background: color-mix(in srgb, var(--c) var(--ev-tint), var(--panel));
   color: var(--text);
   cursor: pointer;
   line-height: 1.2;
 }
-.ev::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--stripes, var(--c)); }
+.ev::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: var(--ev-bar); background: var(--stripes, var(--c)); }
 .ev-title { font-weight: 700; font-size: 1rem; overflow-wrap: anywhere; }
 .ev-time { font-size: 0.8rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ev-who { font-size: 0.75rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
@@ -281,7 +290,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .agenda-day h2 { margin: 0 0 8px; display: flex; gap: 0.5em; align-items: baseline; font-size: 1.3rem; }
 .agenda-day h2 .wd { font-weight: 800; }
 .agenda-day h2 .dn { color: var(--muted); font-weight: 600; }
-.agenda-day.today h2 .wd { color: var(--now); }
+.agenda-day.today h2 .wd { color: var(--today-mark); }
 .agenda-items { display: flex; flex-direction: column; gap: 6px; }
 .agenda-ev { display: grid; grid-template-columns: 7.5rem 1fr; column-gap: 12px; align-items: baseline; padding: 8px 10px 8px 16px; }
 .agenda-ev .ev-time { font-size: 1rem; }
@@ -323,7 +332,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   cursor: pointer;
 }
 .month-day .dn { white-space: nowrap; font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.month-cell.today .month-day .dn { background: var(--now); color: #fff; border-radius: 999px; padding: 0 0.45em; }
+.month-cell.today .month-day .dn { background: var(--today-mark); color: var(--on-mark); border-radius: 999px; padding: 0 0.45em; }
 .ev.month-ev {
   flex: none;
   flex-direction: row;
@@ -333,7 +342,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: 0 4px 0 9px;
   border-radius: 5px;
 }
-.ev.month-ev::before { width: 4px; }
+.ev.month-ev::before { width: min(4px, var(--ev-bar)); }
 .month-ev .ev-time { font-size: 0.75rem; flex: none; }
 .month-ev .ev-title { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .ev.month-ev.full { background: var(--c); color: #fff; }
@@ -371,7 +380,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border-radius: 50%;
   border: none;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   display: grid;
   place-items: center;
   box-shadow: var(--shadow);
@@ -540,6 +549,305 @@ input[type="color"] { width: 2.6rem; height: 2.6rem; border: none; padding: 0; b
 }
 .login-card h1 { margin: 0; }
 
+/* ---------- Stile ---------- */
+
+/* Jeder Stil setzt alle Variablen vollständig, weil sie auch an den Vorschaukacheln der Einstellungen gelten
+   ([data-style] am Element). Regeln für einzelne Bausteine stehen unter :root[data-style=…], damit sie nur
+   für den gewählten Stil der ganzen Seite wirken und nicht in die Kacheln. */
+
+/* Modern: kühl, klare Karten, kräftiges Indigo; folgt dem Dunkelmodus des Geräts */
+[data-style="modern"] {
+  --bg: #eef1f7;
+  --panel: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --line: #e6eaf1;
+  --line-strong: #d2d8e3;
+  --accent: #4f46e5;
+  --accent-text: #ffffff;
+  --today: #f0efff;
+  --now: #f43f5e;
+  --past: rgba(15, 23, 42, 0.025);
+  --shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+  --radius: 18px;
+  --font: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --ev-radius: 12px;
+  --ev-tint: 16%;
+  --ev-bar: 4px;
+  --today-mark: #4f46e5;
+  --on-mark: #ffffff;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  [data-style="modern"] {
+    --bg: #0b1020;
+    --panel: #141b2e;
+    --text: #e5e9f2;
+    --muted: #8e9ab2;
+    --line: #1f2840;
+    --line-strong: #2d3854;
+    --accent: #818cf8;
+    --accent-text: #0b1020;
+    --today: #1d1f45;
+    --past: rgba(255, 255, 255, 0.02);
+    --shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    --today-mark: #818cf8;
+    --on-mark: #0b1020;
+    color-scheme: dark;
+  }
+}
+:root[data-style="modern"] :is(.week, .month) {
+  background: var(--panel);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 6px 20px rgba(15, 23, 42, 0.06);
+  padding: 2px 6px 0;
+  overflow: hidden;
+}
+:root[data-style="modern"] .agenda-day:not(.today) { border-color: transparent; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 6px 20px rgba(15, 23, 42, 0.06); }
+:root[data-style="modern"] :is(.header .range, .header .clock) { font-weight: 800; letter-spacing: -0.02em; }
+:root[data-style="modern"] :is(.day-head .wd, .month-head .wd) { font-size: 0.8rem; letter-spacing: 0.1em; }
+:root[data-style="modern"] :is(.day-head, .allday, .month-head) { border-bottom-width: 1px; }
+:root[data-style="modern"] :is(.header, .filterbar) :is(.btn:not(.primary), .icon, .chip:not(.on)) {
+  border-color: transparent;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+:root[data-style="modern"] .ev.timed { box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
+:root[data-style="modern"] :is(.allday-ev, .ev.month-ev.full) { background: linear-gradient(135deg, var(--c), color-mix(in srgb, var(--c) 72%, #1e1b4b)); }
+:root[data-style="modern"] .mic-wrap.idle .mic { background: linear-gradient(135deg, #6366f1, #a855f7); color: #ffffff; }
+:root[data-style="modern"] .sheet { border-radius: 24px; }
+
+/* Minimalistisch: Schwarz auf Weiß, dünne Linien, leichte Schrift; folgt dem Dunkelmodus des Geräts */
+[data-style="minimal"] {
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --text: #111111;
+  --muted: #8a8a8a;
+  --line: #efefef;
+  --line-strong: #dedede;
+  --accent: #111111;
+  --accent-text: #ffffff;
+  --today: #f7f7f7;
+  --now: #ff3b30;
+  --past: transparent;
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  --radius: 6px;
+  --font: "Helvetica Neue", Helvetica, "Segoe UI", system-ui, Arial, sans-serif;
+  --ev-radius: 3px;
+  --ev-tint: 9%;
+  --ev-bar: 3px;
+  --today-mark: #111111;
+  --on-mark: #ffffff;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  [data-style="minimal"] {
+    --bg: #0a0a0a;
+    --panel: #111111;
+    --text: #f2f2f2;
+    --muted: #7d7d7d;
+    --line: #1c1c1c;
+    --line-strong: #2c2c2c;
+    --accent: #f2f2f2;
+    --accent-text: #0a0a0a;
+    --today: #161616;
+    --shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+    --today-mark: #f2f2f2;
+    --on-mark: #0a0a0a;
+    color-scheme: dark;
+  }
+}
+:root[data-style="minimal"] :is(.header .range, .day-head .dn, .month-day .dn) { font-weight: 300; }
+:root[data-style="minimal"] .header .clock { font-weight: 200; }
+:root[data-style="minimal"] :is(.day-head .wd, .month-head .wd) { font-weight: 500; font-size: 0.8rem; letter-spacing: 0.14em; }
+:root[data-style="minimal"] :is(.day-head, .allday, .month-head) { border-bottom-width: 1px; }
+:root[data-style="minimal"] .ev-title { font-weight: 600; }
+:root[data-style="minimal"] :is(.now, .now-row) { border-top-width: 2px; }
+:root[data-style="minimal"] :is(.allday-ev, .ev.month-ev.full) { background: color-mix(in srgb, var(--c) 14%, var(--panel)); color: var(--text); }
+:root[data-style="minimal"] :is(.allday-ev, .ev.month-ev.full)::before { filter: none; }
+:root[data-style="minimal"] .agenda-ev.allday-ev :is(.ev-time, .ev-meta) { color: var(--muted); }
+:root[data-style="minimal"] .agenda-day { border: none; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; padding-left: 0; padding-right: 0; }
+:root[data-style="minimal"] :is(.header, .filterbar) :is(.icon, .btn:not(.primary), .chip:not(.on)) { border-color: transparent; background: transparent; }
+:root[data-style="minimal"] .sheet { border-radius: 10px; }
+
+/* Kunterbunt: jeder Wochentag eine Farbe, Termine voll in der Personenfarbe, Regenbogen-Mikrofon */
+[data-style="bunt"] {
+  --bg: #fff8ec;
+  --panel: #ffffff;
+  --text: #2b1d4e;
+  --muted: #75679a;
+  --line: #f2e4f4;
+  --line-strong: #e3c9ee;
+  --accent: #ff3d7f;
+  --accent-text: #ffffff;
+  --today: #fff3a6;
+  --now: #ff6b00;
+  --past: rgba(43, 29, 78, 0.03);
+  --shadow: 0 10px 30px rgba(120, 40, 140, 0.22);
+  --radius: 22px;
+  --font: "Nunito", "Quicksand", ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", system-ui, sans-serif;
+  --ev-radius: 14px;
+  --ev-tint: 100%;
+  --ev-bar: 6px;
+  --today-mark: #ff3d7f;
+  --on-mark: #ffffff;
+  color-scheme: light;
+}
+:root[data-style="bunt"] body {
+  background:
+    radial-gradient(circle at 0 0, #ffd3e6 0, transparent 38%),
+    radial-gradient(circle at 100% 0, #cdf3ff 0, transparent 38%),
+    radial-gradient(circle at 100% 100%, #fff1a1 0, transparent 42%),
+    radial-gradient(circle at 0 100%, #d8f7b0 0, transparent 42%),
+    var(--bg);
+  background-attachment: fixed;
+}
+/* Farbe je Wochentag: Woche ab der 2. Spalte (die 1. ist die Stundenleiste), Monat in Siebenergruppen */
+:root[data-style="bunt"] :is(.week-head, .grid) > :nth-child(2),
+:root[data-style="bunt"] .month-head > :nth-child(1),
+:root[data-style="bunt"] .month-grid > :nth-child(7n + 1),
+:root[data-style="bunt"] .agenda > :nth-child(7n + 1) { --day: #ff595e; }
+:root[data-style="bunt"] :is(.week-head, .grid) > :nth-child(3),
+:root[data-style="bunt"] .month-head > :nth-child(2),
+:root[data-style="bunt"] .month-grid > :nth-child(7n + 2),
+:root[data-style="bunt"] .agenda > :nth-child(7n + 2) { --day: #ff924c; }
+:root[data-style="bunt"] :is(.week-head, .grid) > :nth-child(4),
+:root[data-style="bunt"] .month-head > :nth-child(3),
+:root[data-style="bunt"] .month-grid > :nth-child(7n + 3),
+:root[data-style="bunt"] .agenda > :nth-child(7n + 3) { --day: #e9a800; }
+:root[data-style="bunt"] :is(.week-head, .grid) > :nth-child(5),
+:root[data-style="bunt"] .month-head > :nth-child(4),
+:root[data-style="bunt"] .month-grid > :nth-child(7n + 4),
+:root[data-style="bunt"] .agenda > :nth-child(7n + 4) { --day: #43aa8b; }
+:root[data-style="bunt"] :is(.week-head, .grid) > :nth-child(6),
+:root[data-style="bunt"] .month-head > :nth-child(5),
+:root[data-style="bunt"] .month-grid > :nth-child(7n + 5),
+:root[data-style="bunt"] .agenda > :nth-child(7n + 5) { --day: #1982c4; }
+:root[data-style="bunt"] :is(.week-head, .grid) > :nth-child(7),
+:root[data-style="bunt"] .month-head > :nth-child(6),
+:root[data-style="bunt"] .month-grid > :nth-child(7n + 6),
+:root[data-style="bunt"] .agenda > :nth-child(7n + 6) { --day: #6a4c93; }
+:root[data-style="bunt"] :is(.week-head, .grid) > :nth-child(8),
+:root[data-style="bunt"] .month-head > :nth-child(7),
+:root[data-style="bunt"] .month-grid > :nth-child(7n + 7),
+:root[data-style="bunt"] .agenda > :nth-child(7n + 7) { --day: #ff3d7f; }
+:root[data-style="bunt"] :is(.day-head .wd, .month-head .wd) { color: var(--day); font-weight: 900; }
+:root[data-style="bunt"] .day-head { border-bottom: 5px solid var(--day); }
+:root[data-style="bunt"] .month-head .wd { border-bottom: 5px solid var(--day); }
+:root[data-style="bunt"] .month-head { border-bottom: none; }
+:root[data-style="bunt"] :is(.col, .month-cell):not(.today) { background: color-mix(in srgb, var(--day) 7%, transparent); }
+:root[data-style="bunt"] .agenda-day { border-width: 2px; border-left: 10px solid var(--day, var(--line-strong)); }
+:root[data-style="bunt"] :is(.day-head .dn, .month-day .dn, .ev-title) { font-weight: 900; }
+:root[data-style="bunt"] .ev { color: #ffffff; box-shadow: 0 2px 0 color-mix(in srgb, var(--c) 65%, #000); }
+:root[data-style="bunt"] .ev::before { filter: brightness(0.8); }
+:root[data-style="bunt"] .ev :is(.ev-time, .ev-who, .ev-meta) { color: rgba(255, 255, 255, 0.92); }
+:root[data-style="bunt"] .header .range {
+  background: linear-gradient(90deg, #ff595e, #ff924c, #e9a800, #43aa8b, #1982c4, #6a4c93);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 900;
+}
+:root[data-style="bunt"] .header .clock { color: #6a4c93; font-weight: 900; }
+:root[data-style="bunt"] :is(.btn, .chip, .icon) { border-width: 2px; }
+:root[data-style="bunt"] .mic-wrap.idle .mic {
+  background: conic-gradient(from 180deg, #ff595e, #ff924c, #e9a800, #43aa8b, #1982c4, #6a4c93, #ff3d7f, #ff595e);
+}
+:root[data-style="bunt"] .mic svg { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45)); }
+:root[data-style="bunt"] .sheet { border-radius: 26px; }
+
+/* Papier: wie ein gedruckter Wandkalender – cremefarben, Serifenschrift, Doppellinien */
+[data-style="papier"] {
+  --bg: #f2e9d6;
+  --panel: #fbf6ea;
+  --text: #2d2219;
+  --muted: #7c6b56;
+  --line: #e3d5b9;
+  --line-strong: #c9b48e;
+  --accent: #9e3a26;
+  --accent-text: #fff8ee;
+  --today: #f7e2a6;
+  --now: #9e3a26;
+  --past: rgba(90, 60, 20, 0.04);
+  --shadow: 0 8px 24px rgba(70, 45, 15, 0.25);
+  --radius: 4px;
+  --font: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Noto Serif", "Times New Roman", serif;
+  --ev-radius: 2px;
+  --ev-tint: 20%;
+  --ev-bar: 4px;
+  --today-mark: #9e3a26;
+  --on-mark: #fff8ee;
+  color-scheme: light;
+}
+:root[data-style="papier"] body {
+  background: radial-gradient(ellipse at 50% 40%, transparent 55%, rgba(120, 85, 30, 0.12)), var(--bg);
+  background-attachment: fixed;
+}
+:root[data-style="papier"] :is(.week, .month) {
+  background: var(--panel);
+  box-shadow: 0 1px 0 var(--line-strong), 0 6px 16px rgba(70, 45, 15, 0.12);
+  padding: 2px 6px 0;
+}
+:root[data-style="papier"] .header .range { font-style: italic; font-weight: 600; }
+:root[data-style="papier"] :is(.day-head .wd, .month-head .wd) { text-transform: lowercase; font-variant: small-caps; font-size: 1.15rem; letter-spacing: 0.08em; }
+:root[data-style="papier"] :is(.day-head, .allday, .month-head) { border-bottom: 3px double var(--line-strong); }
+:root[data-style="papier"] .header .clock { font-variant-numeric: lining-nums tabular-nums; }
+:root[data-style="papier"] .ev-title { font-weight: 600; }
+:root[data-style="papier"] :is(.btn, .chip, .icon:not(.danger)) { border-radius: 6px; }
+:root[data-style="papier"] .sheet { border-radius: 6px; }
+
+/* Nacht: immer dunkel, gedämpfte Farben, warmes Bernstein statt Blau – blendet abends nicht */
+[data-style="nacht"] {
+  --bg: #0b0d10;
+  --panel: #15181d;
+  --text: #c8ced6;
+  --muted: #7b838d;
+  --line: #1e2228;
+  --line-strong: #2b3038;
+  --accent: #d6a65a;
+  --accent-text: #19140a;
+  --today: #1d1a12;
+  --now: #e57a4e;
+  --past: rgba(255, 255, 255, 0.015);
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.7);
+  --radius: 12px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ev-radius: 8px;
+  --ev-tint: 28%;
+  --ev-bar: 5px;
+  --today-mark: #d6a65a;
+  --on-mark: #19140a;
+  color-scheme: dark;
+}
+:root[data-style="nacht"] :is(.allday-ev, .ev.month-ev.full) { background: color-mix(in srgb, var(--c) 55%, #000); color: #e8e8e8; }
+:root[data-style="nacht"] .agenda-ev.allday-ev :is(.ev-time, .ev-meta) { color: rgba(232, 232, 232, 0.75); }
+:root[data-style="nacht"] .chip.person.on { background: color-mix(in srgb, var(--c) 65%, #000); border-color: transparent; }
+
+/* Auswahl in den Einstellungen: jede Kachel trägt data-style und zeigt sich im eigenen Stil */
+.styles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.style-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  border: 2px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+.style-tile[data-style="bunt"] { background: linear-gradient(135deg, #ffd3e6, #fff1a1 50%, #cdf3ff); }
+.style-tile.on { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
+.style-sample { display: flex; flex-direction: column; gap: 4px; padding: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: min(var(--radius), 10px); }
+.style-sample .mark { align-self: flex-start; padding: 0 0.45em; border-radius: 999px; background: var(--today-mark); color: var(--on-mark); font-size: 0.75rem; font-weight: 700; }
+.style-sample .bar { height: 0.75rem; border-radius: min(var(--ev-radius), 6px); background: color-mix(in srgb, var(--c) var(--ev-tint), var(--panel)); border-left: calc(var(--ev-bar) / 2 + 1px) solid var(--c); }
+.style-sample .bar:nth-child(3) { width: 72%; }
+.style-sample .bar:nth-child(4) { width: 86%; }
+.style-name { font-weight: 700; font-size: 0.95rem; }
+.style-hint { font-size: 0.75rem; color: var(--muted); }
+
 /* ---------- Kleine Bildschirme ---------- */
 
 @media (max-width: 700px) {
@@ -559,4 +867,5 @@ input[type="color"] { width: 2.6rem; height: 2.6rem; border: none; padding: 0; b
   .agenda-ev .ev-meta { grid-column: 1; }
   .row.item { flex-wrap: wrap; }
   .sheet-foot .btn { flex: 1 1 auto; }
+  .styles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

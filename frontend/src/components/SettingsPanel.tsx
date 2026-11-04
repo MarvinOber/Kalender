@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";
+import { STYLE_HINTS, STYLE_LABELS, STYLES, type Style } from "../style";
 import type { EventTag, Me, ModelInfo, Person, Settings } from "../types";
+import { colorVar } from "./eventStyle";
 
 interface Props {
   settings: Settings;
   me: Me | null;
+  /** Stil dieses Geräts; Antippen einer Kachel zeigt ihn probeweise, „Speichern“ übernimmt ihn. */
+  style: Style;
+  onPreviewStyle: (s: Style) => void;
+  onStyle: (s: Style) => void;
   onClose: () => void;
   onSaved: (s: Settings) => void;
   onError: (err: unknown) => void;
@@ -21,12 +27,13 @@ const aliasList = (text: string) =>
     .filter(Boolean);
 
 /** Einstellungen für alle Geräte der Familie – gespeichert auf dem Server, wirksam ab der nächsten Anfrage. */
-export function SettingsPanel({ settings, me, onClose, onSaved, onError }: Props) {
+export function SettingsPanel({ settings, me, style, onPreviewStyle, onStyle, onClose, onSaved, onError }: Props) {
   const [s, setS] = useState<Settings>(() => structuredClone(settings));
   const [aliases, setAliases] = useState<Record<string, string>>({});
   const [models, setModels] = useState<ModelInfo[] | null>(null);
   const [calendars, setCalendars] = useState<{ id: string; summary: string; primary: boolean }[]>([]);
   const [saving, setSaving] = useState(false);
+  const [look, setLook] = useState<Style>(style);
 
   useEffect(() => {
     api.models().then((r) => setModels(r.models)).catch(() => setModels([]));
@@ -66,8 +73,14 @@ export function SettingsPanel({ settings, me, onClose, onSaved, onError }: Props
     setS(kind === "persons" ? { ...next, persons: next.persons.filter((_, j) => j !== i) } : { ...next, event_tags: next.event_tags.filter((_, j) => j !== i) });
   };
 
+  const chooseLook = (st: Style) => {
+    setLook(st);
+    onPreviewStyle(st);
+  };
+
   const save = async () => {
     const body = flushed();
+    onStyle(look); // gilt nur für dieses Gerät und bleibt auch, wenn das Speichern auf dem Server scheitert
     setSaving(true);
     try {
       onSaved(await api.saveSettings(body));
@@ -93,6 +106,38 @@ export function SettingsPanel({ settings, me, onClose, onSaved, onError }: Props
           </button>
         </header>
         <div className="sheet-body">
+          <section>
+            <h3>{t("Stil")}</h3>
+            <div className="styles" role="radiogroup" aria-label={t("Stil")}>
+              {STYLES.map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  role="radio"
+                  aria-checked={look === st}
+                  className={`style-tile ${look === st ? "on" : ""}`}
+                  data-style={st}
+                  onClick={() => chooseLook(st)}
+                >
+                  <span className="style-sample" aria-hidden="true">
+                    <span className="mark">12</span>
+                    {sampleColors(s).map((c, i) => (
+                      <span key={i} className="bar" style={colorVar(c)} />
+                    ))}
+                  </span>
+                  <span className="style-name">
+                    {look === st ? "✓ " : ""}
+                    {t(STYLE_LABELS[st])}
+                  </span>
+                  <span className="style-hint">{t(STYLE_HINTS[st])}</span>
+                </button>
+              ))}
+            </div>
+            <p className="small">
+              {t("Gilt nur für dieses Gerät. Klassisch, Modern und Minimalistisch werden dunkel, wenn das Gerät auf Dunkelmodus steht.")}
+            </p>
+          </section>
+
           <section>
             <h3>{t("Kalender")}</h3>
             <label className="field">
@@ -277,6 +322,11 @@ export function SettingsPanel({ settings, me, onClose, onSaved, onError }: Props
       </div>
     </div>
   );
+}
+
+/** Drei Personenfarben der Familie für die Vorschau, sonst Farben aus der Palette. */
+function sampleColors(s: Settings): string[] {
+  return [...s.persons.map((p) => p.color), ...PALETTE].slice(0, 3);
 }
 
 function ModelList({ id, models }: { id: string; models: ModelInfo[] }) {

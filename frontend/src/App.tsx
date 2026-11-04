@@ -18,6 +18,7 @@ import { prepareImage } from "./photo";
 import { MAX_SECONDS, MicError, Recorder } from "./recorder";
 import type { CalEvent, EditScope, Me, ParseResult, Settings, Weather } from "./types";
 import { type View, inRange, loadView, rangeOf, samePeriod, saveView, step } from "./view";
+import { type Style, applyStyle, loadStyle, saveStyle } from "./style";
 
 const REFRESH_MS = 5 * 60_000; // Änderungen von anderen Geräten
 const IDLE_BACK_TO_TODAY_MS = 3 * 60_000; // Wandbetrieb: nach einer Weile zurück zu heute
@@ -35,6 +36,8 @@ export function App() {
   const [weather, setWeather] = useState<Weather | null>(null);
   const [now, setNow] = useState(() => nowIn("Europe/Berlin"));
   const [view, setView] = useState<View>(loadView);
+  const [style, setStyle] = useState<Style>(loadStyle);
+  const [stylePreview, setStylePreview] = useState<Style | null>(null); // Probeansicht in den Einstellungen
   const [anchor, setAnchor] = useState(() => nowIn("Europe/Berlin").date); // ein Tag im angezeigten Zeitraum
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [fetchedAt, setFetchedAt] = useState("");
@@ -170,6 +173,8 @@ export function App() {
 
   useEffect(() => saveFilter(filter), [filter]);
   useEffect(() => saveView(view), [view]);
+  useEffect(() => saveStyle(style), [style]);
+  useEffect(() => applyStyle(stylePreview ?? style), [style, stylePreview]);
 
   // „Termine“ beginnt immer heute, unabhängig von der geblätterten Woche bzw. dem Monat.
   // Woche und Monat: zeigt die Ansicht gerade heute, bleibt es bei heute; sonst beim Anfang des geblätterten Zeitraums
@@ -472,7 +477,16 @@ export function App() {
         <SettingsPanel
           settings={settings}
           me={me}
-          onClose={() => setSettingsOpen(false)}
+          style={style}
+          onPreviewStyle={setStylePreview}
+          onStyle={(st) => {
+            setStyle(st);
+            setStylePreview(null);
+          }}
+          onClose={() => {
+            setSettingsOpen(false);
+            setStylePreview(null); // Abbrechen: Probeansicht verwerfen
+          }}
           onSaved={(s) => {
             setSettings(s);
             setLanguage(s.language);

@@ -26,6 +26,10 @@ von einer KI in strukturierte Einträge verwandelt, im Dialog bestätigt und dan
   „jeden 2. Dienstag“, gestrichene Einzeltermine), lassen sich bearbeiten, ihre Wiederholung bleibt aber unverändert.
 - **Tags**: Personen (mit Farbe und Zusätzen wie „Mama“, „Kinder“) und Ereignisse (Schule, Arzt, Sport …).
   Filterleiste mit Mehrfachauswahl, im Gerät gespeichert.
+- **Stile**: *Klassisch*, *Modern*, *Minimalistisch*, *Kunterbunt* (jeder Wochentag eine Farbe, Termine voll in
+  der Personenfarbe), *Papier* (wie ein gedruckter Wandkalender) und *Nacht* (immer dunkel, gedämpft). Auswahl
+  ganz oben in den Einstellungen über Vorschaukacheln; Antippen zeigt den Stil sofort zur Probe, „Speichern“
+  übernimmt ihn, „Abbrechen“ verwirft ihn. Gilt je Gerät (`localStorage`), Standard *Klassisch*.
 - **Wetter**: kleines Icon mit Temperatur neben der Uhr (Open-Meteo, ohne Schlüssel, über das Backend und dort
   15 Minuten zwischengespeichert). Ort und Koordinaten in den Einstellungen; ohne Ort kein Icon.
 - **Einstellungen** für die ganze Familie in Firestore: Kalender, drei Modelle – Transkription, Termin-Erkennung,
@@ -147,6 +151,8 @@ npm test
   den Einstellungen.
 - `frontend/src/logic.test.ts` – Wochenrechnung, Filter, Überschneidungen, ganztägige Balken, Wettersymbole,
   Maße beim Verkleinern der Fotos.
+- `frontend/src/style.test.ts` – Stilwahl mit Rückfall auf *Klassisch*, Namen und Übersetzungen, und dass
+  `styles.css` für jeden Stil alle Variablen setzt (sonst erben die Vorschaukacheln Farben des aktiven Stils).
 - `test_extraction_live.py` – dieselben Sätze gegen das echte Modell (nur auf Wunsch, kostet Cent-Beträge):
 
 ```powershell
@@ -294,6 +300,8 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | Wetter von Open-Meteo über das Backend | frei und ohne Schlüssel; ein Abruf für alle Geräte, Fehler lassen den letzten Stand stehen. |
 | Filter: innerhalb einer Gruppe *oder*, zwischen Personen und Ereignissen *und* | übliche Mehrfachfilter-Logik. |
 | Ansicht wählt die Familie, nicht mehr die Ausrichtung des Geräts; Standard *Woche*, Wahl je Gerät in `localStorage` | Auftrag „Default Woche“; gespeichert wie der Filter, damit das Wand-Tablet nach einem Neustart gleich bleibt. |
+| Stil je Gerät in `localStorage`, nicht in `config/settings` | Wie die Ansicht eine Frage der Anzeige: Wand-Tablet und Handy dürfen verschieden aussehen; kein Backend nötig. Sechs Stile: die drei aus dem Auftrag („Modern, Minimalistisch, Kunterbunt, …“) plus *Papier* und *Nacht*; der bisherige Look bleibt als *Klassisch* Standard. |
+| Stile nur über CSS-Variablen und `:root[data-style=…]`, Systemschriften statt Webfonts | Keine zusätzlichen Anfragen und Abhängigkeiten; die Stile unterscheiden sich über Farben, Formen und Schriftstärken. *Klassisch*, *Modern* und *Minimalistisch* folgen dem Dunkelmodus des Geräts, *Kunterbunt* und *Papier* bleiben hell, *Nacht* ist immer dunkel. |
 | *Termine* zeigt die nächsten 31 Tage ab heute, unabhängig von der zuvor gewählten Woche oder dem Monat; Pfeile blättern 31 Tage, um Mitternacht rückt die Liste mit | Auftrag „alle Termine in den nächsten 31 Tagen“; die API liefert bis 42 Tage am Stück. |
 | Monat: Termine je Tag als Zeile, mehrtägige an jedem Tag einzeln; Tippen auf den Tag öffnet die Woche | lesbar in schmalen Zellen ohne Balkenlogik über Zellgrenzen; Details stehen in der Wochenansicht. |
 | Mikrofon-Knopf als Overlay (4 rem), Hinweistext nur während Aufnahme und Auswertung, „Stand“-Zeile klein unten links; *Termine* lässt unten Platz zum Hervorscrollen | Auftrag „Overlay, Kalender bis zum unteren Rand, Knopf etwas kleiner“; der Ruhe-Hinweis hätte Termine verdeckt und steht weiter als Tooltip am Knopf. |

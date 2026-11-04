@@ -10,4 +10,6 @@ export default defineConfig({
     proxy: { "/api": "http://localhost:8080", "/auth": "http://localhost:8080" },
   },
   build: { outDir: "dist", sourcemap: false },
+  // style.test.ts liest styles.css als Text (?raw); ohne das liefert Vitest für CSS nur einen leeren Text
+  test: { css: { include: [/styles\.css/] } },
 });
