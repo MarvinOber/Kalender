@@ -197,6 +197,65 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .footer .stale { color: var(--error); }
 
+/* Ladeanzeige: Streifen oben am Kalender, solange Termine geladen werden; beim noch nicht geladenen Zeitraum
+   zusätzlich ein Hinweis und gedämpfte Termine. Erscheint erst nach 0,3 s, damit schnelle Antworten nicht flackern. */
+.loadbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 6;
+  overflow: hidden;
+  border-radius: 2px;
+  pointer-events: none;
+  opacity: 0;
+  animation: appear 0.2s 0.3s forwards;
+}
+.loadbar::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: loadbar 1.2s ease-in-out infinite;
+}
+.loading-note {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  box-shadow: var(--shadow);
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  animation: appear 0.2s 0.3s forwards;
+}
+.loading-note .spinner {
+  width: 1rem;
+  height: 1rem;
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+  border-top-color: var(--accent);
+}
+.calendar.loading > :not(.loadbar, .loading-note) { opacity: 0.5; transition: opacity 0.2s 0.3s; }
+@keyframes loadbar { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+@keyframes appear { to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .loadbar::before { width: 100%; animation: none; opacity: 0.6; }
+}
+
 /* Querformat: Wochenraster */
 .week { height: 100%; display: flex; flex-direction: column; }
 .week-head, .allday, .grid { display: grid; grid-template-columns: 3.2rem repeat(7, minmax(0, 1fr)); }

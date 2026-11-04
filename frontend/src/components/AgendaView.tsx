@@ -7,6 +7,8 @@ import { eventStyle, personNames, tagNames } from "./eventStyle";
 
 interface Props {
   events: CalEvent[];
+  /** Text, wenn keine Termine zu zeigen sind; „“ zeigt nichts (während des Ladens), ohne Angabe „Keine Termine“. */
+  empty?: string;
   start: string;
   days: number;
   today: string;
@@ -16,14 +18,14 @@ interface Props {
 }
 
 /** Ansicht „Termine“: alle Termine der nächsten Tage als Liste, ein Abschnitt je Tag mit Terminen. */
-export function AgendaView({ events, start, days, today, nowMinutes, settings, onSelect }: Props) {
+export function AgendaView({ events, empty, start, days, today, nowMinutes, settings, onSelect }: Props) {
   // Mehrtägige ganztägige Termine (Ferien) nur einmal am ersten sichtbaren Tag, mit „bis …“
   const list = dayItems(events, start, days)
     .map((items, i) => ({ d: addDays(start, i), items: items.filter((x) => !(x.allDay && x.continuesBefore && i > 0)) }))
     .filter(({ items }) => items.length > 0);
   return (
     <div className="agenda">
-      {list.length === 0 && <div className="empty">{t("Keine Termine")}</div>}
+      {list.length === 0 && empty !== "" && <div className="empty">{empty ?? t("Keine Termine")}</div>}
       {list.map(({ d, items }) => {
         const nowIndex =
           d === today ? items.findIndex((x) => !x.allDay && !x.continuesBefore && minutesOf(x.event.start) > nowMinutes) : -2;

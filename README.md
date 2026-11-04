@@ -10,6 +10,11 @@ von einer KI in strukturierte Einträge verwandelt, im Dialog bestätigt und dan
   Farben je Person. Pfeile und Wischen blättern Woche bzw. Monat (die neue Woche gleitet aus der Richtung herein),
   „Heute“ springt zurück. Aktualisierung alle 5 Minuten und beim Aufwachen des Geräts; nach 3 Minuten ohne
   Bedienung springt die Anzeige zurück zu heute.
+- **Ladeanzeige**: Solange Termine geladen werden, läuft oben am Kalender ein schmaler Streifen. Sind die Termine
+  des angezeigten Zeitraums noch nicht da (Start, gerade geblättert), steht zusätzlich „Termine werden geladen …“
+  über dem gedämpften Kalender und in der Fußzeile, statt einer leeren Woche oder „Keine Termine“; beim
+  Aktualisieren im Hintergrund zeigt die Fußzeile „Stand 14:05 · wird aktualisiert …“. Schlägt das Laden fehl,
+  steht dort „Termine nicht geladen“.
 - **Handy** (bis 700 px breit oder bis 500 px hoch, also auch quer): der Kopf steht in einer Zeile – links KW und
   Zeitraum mit kurzen Monatsnamen (das laufende Jahr entfällt), rechts Wetter, „Heute“ als Kalenderblatt mit dem
   heutigen Tag, die Ansicht als Aufklappmenü (*Termine/Woche/Monat*) und Einstellungen. Uhr und Vollbild entfallen,
@@ -194,7 +199,7 @@ npm test
   Nachricht, Abnahme (Termin anlegen → Lauf einen Tag vorher → „Morgen, 10:00 Uhr …“), Lauf nur mit Geheimnis.
 - `test_weather.py` – Open-Meteo-Abruf (Attrappe), Zwischenspeicher mit Rückfall auf den letzten Stand, Ort aus
   den Einstellungen.
-- `frontend/src/logic.test.ts` – Wochenrechnung, Zeitraum-Titel (auch kurz fürs Handy), Filter, Überschneidungen, ganztägige Balken, Monatsbalken und „+n weitere“, Wettersymbole,
+- `frontend/src/logic.test.ts` – Wochenrechnung, Zeitraum-Titel (auch kurz fürs Handy), Ladezustand (laden, aktualisieren, fehlgeschlagen), Filter, Überschneidungen, ganztägige Balken, Monatsbalken und „+n weitere“, Wettersymbole,
   Maße beim Verkleinern der Fotos, Kamera-Auswahl nur auf Touch-Geräten, Meldungen bei Antworten ohne JSON.
 - `frontend/src/push.test.ts` – Namen der Vorlaufzeiten, Server-Schlüssel als Bytes, Schlüsselwechsel, Gerätename,
   Service Worker zeigt an und öffnet beim Tippen (ohne `fetch`-Handler).
@@ -344,7 +349,7 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | Bild lässt sich nicht öffnen, falsches Format, über 10 MB | Meldung (JPEG, PNG oder WebP wählen) |
 | Google-Token abgelaufen oder widerrufen | Banner „Die Google-Anmeldung ist abgelaufen“ mit „Erneut anmelden“ |
 | Kalender-ID falsch oder ohne Schreibrecht | Meldung mit Hinweis auf die Einstellungen |
-| Server nicht erreichbar | letzter Stand bleibt sichtbar, Fußzeile „offline“ |
+| Server nicht erreichbar | letzter Stand bleibt sichtbar, Fußzeile „offline“; für einen noch nicht geladenen Zeitraum „Termine nicht geladen“ |
 | Benachrichtigungen im Browser blockiert | Hinweis in den Einstellungen, wie man sie wieder erlaubt |
 | Browser ohne Push (z. B. iPhone ohne Home-Bildschirm-App) | Hinweis in den Einstellungen |
 | Abo beendet (Browserdaten gelöscht, Erlaubnis entzogen) | Push-Dienst meldet 404/410 → Abo wird gelöscht; „Test senden“ meldet „neu einschalten“ |
@@ -402,4 +407,5 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | `Urgency: high` für alle Erinnerungen | Android stellt normale Nachrichten im Ruhemodus (Doze) verzögert zu; eine Erinnerung „1 Stunde vorher“ wäre dann zu spät. |
 | Service Worker ohne `fetch`-Handler | Nur für Push; die Oberfläche lädt weiter frisch vom Server, kein Zwischenspeicher, der alte Stände zeigt. |
 | PNG-Icons (`icon-192.png`, `icon-512.png`, `badge-96.png`) aus den Formen des Favicons | Android zeigt in Benachrichtigungen keine SVG-Icons; das Badge ist die weiße Silhouette für die Statusleiste. Das Manifest nennt die PNGs zusätzlich fürs Installieren. |
+| Ladeanzeige je Zeitraum (Schlüssel Start/Tage der letzten erfolgreichen Antwort) statt eines Zwischenspeichers für schon besuchte Wochen; Anzeige erst nach 0,3 s | Beim Blättern sah eine noch leere Woche aus wie eine Woche ohne Termine. Ein Zwischenspeicher zeigte womöglich veraltete Termine; die Anzeige allein beseitigt das Missverständnis. Die Verzögerung verhindert Flackern bei schnellen Antworten und alle 5 Minuten an der Wand. |
 | Lokale Kalender-Attrappe zeigt Serien nur mit dem ersten Termin | Google expandiert Serien selbst (`singleEvents=true`); die Attrappe dient nur der Entwicklung. |

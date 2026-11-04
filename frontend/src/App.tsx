@@ -17,7 +17,7 @@ import { setLanguage, t } from "./i18n";
 import { prepareImage, type PhotoSource } from "./photo";
 import { MAX_SECONDS, MicError, Recorder } from "./recorder";
 import type { CalEvent, EditScope, Me, ParseResult, Settings, Weather } from "./types";
-import { type View, inRange, loadView, rangeOf, samePeriod, saveView, step } from "./view";
+import { type View, inRange, loadState, loadView, rangeKey, rangeOf, samePeriod, saveView, step } from "./view";
 import { type Style, applyStyle, loadStyle, saveStyle } from "./style";
 import { syncPush } from "./push";
 
@@ -43,6 +43,8 @@ export function App() {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [fetchedAt, setFetchedAt] = useState("");
   const [stale, setStale] = useState(false);
+  const [loadedKey, setLoadedKey] = useState(""); // Zeitraum, zu dem `events` gehört
+  const [pending, setPending] = useState(false); // die letzte Anfrage nach Terminen läuft noch
   const [filter, setFilter] = useState<Filter>(loadFilter);
   const [mic, setMic] = useState<MicState>("idle");
   const [level, setLevel] = useState(0);
@@ -114,15 +116,20 @@ export function App() {
 
   const loadEvents = useCallback(async () => {
     const no = ++requestNo.current; // beim schnellen Blättern gilt nur die letzte Antwort
+    const key = rangeKey(range);
+    setPending(true);
     try {
       const data = await api.events(range.start, range.days);
       if (no !== requestNo.current) return;
+      setPending(false);
       setEvents(data.events);
+      setLoadedKey(key);
       setFetchedAt(data.fetched_at.slice(11, 16));
       setStale(false);
       setReauth(false);
     } catch (err) {
       if (no !== requestNo.current) return;
+      setPending(false);
       setStale(true);
       showError(err);
     }
@@ -351,6 +358,7 @@ export function App() {
 
   // ---------- Anzeige ----------
   const visible = useMemo(() => events.filter((e) => matches(e, filter)), [events, filter]);
+  const loading = loadState(rangeKey(range), loadedKey, pending, stale);
 
   useEffect(() => {
     if (!toast) return;
@@ -389,13 +397,23 @@ export function App() {
       )}
       <main
         ref={calendarRef}
-        className="calendar"
+        className={`calendar${loading === "loading" ? " loading" : ""}`}
+        aria-busy={loading === "loading" || loading === "refreshing"}
         onPointerDown={swipeStart}
         onPointerUp={(e) => swipeEnd(e, go)}
         onPointerCancel={swipeCancel}
       >
+        {(loading === "loading" || loading === "refreshing") && <div className="loadbar" aria-hidden="true" />}
+        {loading === "loading" && (
+          <div className="loading-note" role="status">
+            <span className="spinner" aria-hidden="true" />
+            {t("Termine werden geladen …")}
+          </div>
+        )}
         {view === "list" && (
-          <AgendaView events={visible} start={range.start} days={range.days} today={today} nowMinutes={now.minutes} settings={settings} onSelect={setDetails} />
+          <AgendaView
+            empty={loading === "loading" ? "" : loading === "missing" ? t("Termine nicht geladen") : undefined}
+            events={visible} start={range.start} days={range.days} today={today} nowMinutes={now.minutes} settings={settings} onSelect={setDetails} />
         )}
         {view === "week" && (
           <WeekView events={visible} monday={range.start} today={today} nowMinutes={now.minutes} settings={settings} onSelect={setDetails} />
@@ -417,7 +435,10 @@ export function App() {
       </main>
       <footer className="footer">
         <span className={stale ? "stale" : ""}>
-          {fetchedAt && `${t("Stand")} ${fetchedAt}`}
+          {loading === "loading" && t("Termine werden geladen …")}
+          {loading === "missing" && t("Termine nicht geladen")}
+          {(loading === "idle" || loading === "refreshing") && fetchedAt && `${t("Stand")} ${fetchedAt}`}
+          {loading === "refreshing" && ` · ${t("wird aktualisiert …")}`}
           {stale && " · offline"}
           {me?.fake_llm && " · Demo-KI"}
         </span>

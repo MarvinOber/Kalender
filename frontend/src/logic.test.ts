@@ -5,7 +5,7 @@ import { matches, pruneFilter } from "./filter";
 import { allDayBars, dayItems, fitWeek, monthWeeks, timedSegments, visibleHours } from "./layout";
 import { cameraAvailable, fitWithin } from "./photo";
 import type { CalEvent } from "./types";
-import { inRange, rangeOf, samePeriod, step } from "./view";
+import { inRange, loadState, rangeKey, rangeOf, samePeriod, step } from "./view";
 import { weatherSymbol } from "./weather";
 
 const ev = (p: Partial<CalEvent>): CalEvent => ({
@@ -143,6 +143,25 @@ describe("Ansicht", () => {
     expect(step("month", "2026-11-17", 1)).toBe("2026-12-01");
     expect(step("month", "2026-01-31", -1)).toBe("2025-12-01");
     expect(addMonths("2026-12-15", 2)).toBe("2027-02-01");
+  });
+
+  it("zeigt, ob die Termine des Zeitraums noch geladen werden", () => {
+    const woche = rangeKey(rangeOf("week", "2026-11-05"));
+    const naechste = rangeKey(rangeOf("week", "2026-11-12"));
+    expect(woche).toBe("2026-11-02/7");
+    // erster Start: noch nichts geladen, auch bevor die Anfrage losgeht
+    expect(loadState(woche, "", false, false)).toBe("loading");
+    expect(loadState(woche, "", true, false)).toBe("loading");
+    // geladen; Aktualisierung im Hintergrund
+    expect(loadState(woche, woche, false, false)).toBe("idle");
+    expect(loadState(woche, woche, true, false)).toBe("refreshing");
+    // geblättert: die gezeigten Termine gehören zur vorigen Woche
+    expect(loadState(naechste, woche, true, false)).toBe("loading");
+    // fehlgeschlagen: nicht als „Keine Termine“ ausgeben; ein neuer Versuch lädt wieder
+    expect(loadState(naechste, woche, false, true)).toBe("missing");
+    expect(loadState(naechste, woche, true, true)).toBe("loading");
+    // Fehler beim Aktualisieren: der letzte Stand der Woche bleibt
+    expect(loadState(woche, woche, false, true)).toBe("idle");
   });
 
   it("erkennt den aktuellen Zeitraum", () => {

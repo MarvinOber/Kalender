@@ -63,3 +63,22 @@ export function saveView(view: View): void {
     /* privater Modus: Ansicht gilt dann nur bis zum Neuladen */
   }
 }
+
+/** Schlüssel eines Zeitraums – damit erkennt die App, ob die angezeigten Termine zum aktuellen Zeitraum gehören. */
+export function rangeKey(range: Range): string {
+  return `${range.start}/${range.days}`;
+}
+
+/**
+ * Ladezustand des angezeigten Zeitraums:
+ * „loading“ – seine Termine sind noch nicht da (erster Start, gerade geblättert), es wird noch geladen;
+ * „refreshing“ – sie sind da und werden im Hintergrund aktualisiert;
+ * „missing“ – sie sind nicht da und der letzte Versuch ist fehlgeschlagen; „idle“ – alles aktuell.
+ */
+export type LoadState = "idle" | "loading" | "refreshing" | "missing";
+
+export function loadState(current: string, loaded: string, pending: boolean, failed: boolean): LoadState {
+  if (loaded === current) return pending ? "refreshing" : "idle";
+  // Vor der ersten Anfrage (und zwischen Blättern und Anfrage) zählt das schon als Laden – kein „Keine Termine“-Blitzen
+  return pending || !failed ? "loading" : "missing";
+}
