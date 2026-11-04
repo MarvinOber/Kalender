@@ -10,12 +10,18 @@ interface Props {
   onStart: () => void;
   onStop: () => void;
   onType: () => void;
+  onPhoto: () => void;
+  /** Text während der Verarbeitung, Standard „Verstehe …“ */
+  busyLabel?: string;
 }
 
 const HOLD_MS = 400; // länger gedrückt = Sprechtaste, kürzer = Antippen startet und stoppt
 
-/** Runder Knopf, schwebt unten in der Mitte über dem Kalender: gedrückt halten (loslassen beendet) oder antippen (erneut tippen beendet). */
-export function MicButton({ state, level, seconds, onStart, onStop, onType }: Props) {
+/**
+ * Runder Knopf, schwebt unten in der Mitte über dem Kalender: gedrückt halten (loslassen beendet) oder antippen
+ * (erneut tippen beendet). Links daneben der Foto-Knopf, rechts der Knopf zum Tippen.
+ */
+export function MicButton({ state, level, seconds, onStart, onStop, onType, onPhoto, busyLabel }: Props) {
   const mode = useRef<"none" | "pending" | "hold" | "tap">("none");
   const downAt = useRef(0);
   const stopWhenReady = useRef(false);
@@ -63,7 +69,7 @@ export function MicButton({ state, level, seconds, onStart, onStop, onType }: Pr
   const recording = state === "recording" || state === "starting";
   const label =
     state === "processing"
-      ? t("Verstehe …")
+      ? busyLabel ?? t("Verstehe …")
       : recording
         ? `${t("Ich höre zu …")} ${fmt(seconds)} · ${mode.current === "tap" ? t("Tippen zum Beenden") : t("Loslassen zum Beenden")}`
         : t("Gedrückt halten oder tippen und sprechen");
@@ -90,9 +96,14 @@ export function MicButton({ state, level, seconds, onStart, onStop, onType }: Pr
         {state === "processing" ? <span className="spinner" /> : <MicIcon />}
       </button>
       {state === "idle" && (
-        <button className="icon type-btn" aria-label={t("Text eingeben")} title={t("Text eingeben")} onClick={onType}>
-          ⌨
-        </button>
+        <>
+          <button className="icon side-btn photo-btn" aria-label={t("Foto aufnehmen")} title={t("Foto aufnehmen")} onClick={onPhoto}>
+            <CameraIcon />
+          </button>
+          <button className="icon side-btn type-btn" aria-label={t("Text eingeben")} title={t("Text eingeben")} onClick={onType}>
+            ⌨
+          </button>
+        </>
       )}
     </div>
   );
@@ -100,6 +111,21 @@ export function MicButton({ state, level, seconds, onStart, onStop, onType }: Pr
 
 function fmt(s: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function CameraIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+      <path
+        d="M4 7.5h3l1.6-2.5h6.8L17 7.5h3a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        fill="none"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="13" r="3.4" stroke="currentColor" strokeWidth="1.8" fill="none" />
+    </svg>
+  );
 }
 
 function MicIcon() {

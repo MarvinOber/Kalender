@@ -18,6 +18,7 @@ SETTINGS_PATH = "config/settings"
 
 DEFAULT_TRANSCRIPTION_MODEL = "xiaomi/mimo-v2.6-pro"
 DEFAULT_EXTRACTION_MODEL = "xiaomi/mimo-v2.6-pro"
+DEFAULT_PHOTO_MODEL = "xiaomi/mimo-v2.6-pro"  # nimmt Bilder an und kann JSON-Schema
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -85,6 +86,7 @@ class Settings(BaseModel):
     calendar_id: str = "primary"
     transcription_model: str = DEFAULT_TRANSCRIPTION_MODEL
     extraction_model: str = DEFAULT_EXTRACTION_MODEL
+    photo_model: str = DEFAULT_PHOTO_MODEL  # Fotos von Kalenderseiten, Terminzetteln, Briefen
     language: str = "de"
     timezone: str = "Europe/Berlin"
     default_duration_min: int = Field(default=60, ge=5, le=24 * 60)
@@ -95,7 +97,7 @@ class Settings(BaseModel):
     weather_lat: float = Field(default=53.86667, ge=-90, le=90)
     weather_lon: float = Field(default=9.73333, ge=-180, le=180)
 
-    @field_validator("calendar_id", "transcription_model", "extraction_model")
+    @field_validator("calendar_id", "transcription_model", "extraction_model", "photo_model")
     @classmethod
     def _not_empty(cls, v: str) -> str:
         v = v.strip()

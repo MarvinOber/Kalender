@@ -117,10 +117,12 @@ def list_models(client: httpx.Client | None = None) -> list[dict[str, Any]]:
     for m in raw:
         arch = m.get("architecture") or {}
         params = m.get("supported_parameters") or []
+        inputs = arch.get("input_modalities") or []
         models.append({
             "id": m["id"],
             "name": m.get("name") or m["id"],
-            "audio": "audio" in (arch.get("input_modalities") or []),
+            "audio": "audio" in inputs,
+            "image": "image" in inputs,
             "structured": "structured_outputs" in params or "response_format" in params,
             "prompt_price": (m.get("pricing") or {}).get("prompt"),
         })

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { addDays, addMonths, isoWeek, mondayOf, nowIn, rangeLabel } from "./dates";
 import { matches, pruneFilter } from "./filter";
 import { allDayBars, dayItems, timedSegments, visibleHours } from "./layout";
+import { fitWithin } from "./photo";
 import type { CalEvent } from "./types";
 import { inRange, rangeOf, samePeriod, step } from "./view";
 import { weatherSymbol } from "./weather";
@@ -168,5 +169,17 @@ describe("Ansicht", () => {
     expect(days.flat().some((x) => x.event.id === "vorher")).toBe(false);
     expect(days[9].find((x) => x.event.id === "nacht")?.continuesAfter).toBe(false);
     expect(days[8][0]).toMatchObject({ continuesBefore: true, continuesAfter: true });
+  });
+});
+
+describe("Foto", () => {
+  it("verkleinert auf höchstens 2048 px an der längsten Seite", () => {
+    expect(fitWithin(4032, 3024)).toEqual({ width: 2048, height: 1536 }); // Handy quer
+    expect(fitWithin(3024, 4032)).toEqual({ width: 1536, height: 2048 }); // Handy hoch
+    expect(fitWithin(8000, 100)).toEqual({ width: 2048, height: 26 });
+  });
+  it("lässt kleine Bilder unverändert", () => {
+    expect(fitWithin(1200, 900)).toEqual({ width: 1200, height: 900 });
+    expect(fitWithin(2048, 2048)).toEqual({ width: 2048, height: 2048 });
   });
 });

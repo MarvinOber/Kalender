@@ -13,7 +13,7 @@ from app.calendar_api import GoogleCalendar
 from app.fake_llm import DEMO_SENTENCE
 from app.openrouter import ModelUnavailable
 
-from .conftest import ScriptedLlm
+from .conftest import PHOTO, ScriptedLlm
 from .test_calendar import FakeGoogleCalendarServer
 
 
@@ -190,3 +190,62 @@ def test_serie_oder_einzelner_termin(client):
     assert client.delete("/api/events/s1_20261110T160000Z", params={"scope": "series"}).status_code == 200
     assert server.requests[-1].method == "DELETE" and server.requests[-1].url.path.endswith("/events/s1")
     assert [e["id"] for e in server.events["primary"]] == ["s1_20261110T160000Z"]
+
+
+# ---------- Foto ----------
+
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 2000
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 2000
+
+
+def test_foto_erkennen_bestaetigen_anzeigen(client):
+    # Demo-KI: jedes Foto ist derselbe Terminzettel (Zahnarzt Max) plus Elternbrief
+    resp = client.post("/api/photo", files={"image": ("foto.jpg", JPEG, "image/jpeg")})
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert "Zahnarztpraxis" in data["transcript"] and data["message"] == ""
+    zahnarzt, elternabend = data["events"]
+    assert (zahnarzt["start_date"], zahnarzt["start_time"], zahnarzt["persons"], zahnarzt["tags"]) == \
+        ("2026-11-05", "15:30:00", ["max"], ["arzt"])
+    assert (elternabend["start_date"], elternabend["tags"]) == ("2026-11-17", ["schule"])
+    assert client.get("/api/events", params={"start": "2026-11-02"}).json()["events"] == []  # erst „Anlegen“
+    assert len(client.post("/api/events", json={"events": data["events"]}).json()["created"]) == 2
+    week = client.get("/api/events", params={"start": "2026-11-02"}).json()["events"]
+    assert [(e["title"], e["start"], e["location"]) for e in week] == [
+        ("Kontrolle Zahnarzt", "2026-11-05T15:30", "Zahnarztpraxis Dr. Weiß, Hauptstraße 5")]
+
+
+def test_foto_modell_aus_einstellungen(client):
+    llm = ScriptedLlm()
+    main.app.dependency_overrides[main.llm_dep] = lambda: llm
+    settings = client.get("/api/settings").json()
+    assert settings["photo_model"] == "xiaomi/mimo-v2.6-pro"
+    client.put("/api/settings", json=settings | {"photo_model": "google/gemini-3.5-flash"})
+    client.post("/api/photo", files={"image": ("bild.heic", PNG, "application/octet-stream")})
+    [call] = llm.calls
+    assert call["model"] == "google/gemini-3.5-flash"
+    # Format kommt aus dem Dateiinhalt, nicht aus dem Namen
+    assert call["messages"][-1]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,")
+    assert "text" in call["schema"]["properties"]
+    assert client.put("/api/settings", json=settings | {"photo_model": " "}).status_code == 422
+
+
+def test_foto_ohne_termin(client):
+    llm = ScriptedLlm({PHOTO: {"text": "", "events": []}})
+    main.app.dependency_overrides[main.llm_dep] = lambda: llm
+    data = client.post("/api/photo", files={"image": ("f.jpg", JPEG, "image/jpeg")}).json()
+    assert data["events"] == [] and "nichts zu lesen" in data["message"]
+    llm.answers[PHOTO] = {"text": "Herzlichen Glückwunsch!", "events": []}
+    data = client.post("/api/photo", files={"image": ("f.jpg", JPEG, "image/jpeg")}).json()
+    assert data["transcript"] == "Herzlichen Glückwunsch!"
+    assert data["message"] == "Auf dem Foto wurde kein Termin erkannt."
+
+
+def test_foto_format_und_groesse(client):
+    resp = client.post("/api/photo", files={"image": ("brief.pdf", b"%PDF-1.7" + b"x" * 3000, "application/pdf")})
+    assert resp.status_code == 415 and resp.json()["code"] == "image_format"
+    big = JPEG + b"\x00" * main.MAX_IMAGE_BYTES
+    resp = client.post("/api/photo", files={"image": ("f.jpg", big, "image/jpeg")})
+    assert resp.status_code == 413
+    assert client.post("/api/photo", files={"image": ("f.jpg", JPEG, "image/jpeg")},
+                       headers={"X-Kalender": ""}).status_code == 403

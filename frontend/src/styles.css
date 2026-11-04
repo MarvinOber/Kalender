@@ -383,8 +383,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
   transition: transform 0.15s, background 0.15s;
 }
 .mic:active { transform: scale(0.96); }
-.type-btn { position: absolute; left: calc(100% + 12px); bottom: 0.7rem; opacity: 0.9; box-shadow: var(--shadow); }
+/* Kleine Knöpfe links (Foto) und rechts (Tippen) neben dem Mikrofon */
+.side-btn { position: absolute; bottom: 0.7rem; opacity: 0.9; box-shadow: var(--shadow); }
+.type-btn { left: calc(100% + 12px); }
+.photo-btn { right: calc(100% + 12px); }
 .confirm .sheet-body > .btn { align-self: flex-start; }
+/* Foto im Bestätigungsdialog: klein als Vorschau, Tippen vergrößert */
+.photo-preview { flex: none; align-self: flex-start; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); overflow: hidden; cursor: zoom-in; line-height: 0; }
+.photo-preview img { display: block; max-width: 100%; max-height: 8rem; object-fit: contain; }
+.photo-preview.zoom { align-self: stretch; cursor: zoom-out; }
+.photo-preview.zoom img { max-height: 70dvh; margin: 0 auto; }
 .recording .mic, .starting .mic {
   background: var(--now);
   box-shadow: 0 0 0 calc(8px + var(--level) * 28px) color-mix(in srgb, var(--now) 30%, transparent), var(--shadow);

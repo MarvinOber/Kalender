@@ -1,7 +1,7 @@
 # Familienkalender
 
-Wochenkalender für ein Tablet oder einen Bildschirm an der Wand. Termine werden eingesprochen, von einer KI in
-strukturierte Einträge verwandelt, im Dialog bestätigt und dann in einen Google-Kalender geschrieben.
+Wochenkalender für ein Tablet oder einen Bildschirm an der Wand. Termine werden eingesprochen oder fotografiert,
+von einer KI in strukturierte Einträge verwandelt, im Dialog bestätigt und dann in einen Google-Kalender geschrieben.
 
 - **Drei Ansichten**, umschaltbar im Kopf, Standard *Woche* (die Wahl bleibt im Gerät gespeichert):
   *Termine* – alle Termine der nächsten 31 Tage ab heute als Liste, ohne leere Tage, mehrtägige ganztägige einmal mit „bis …“; *Woche* – Zeitraster Mo–So ohne Scrollen, ganztägige Termine oben,
@@ -13,6 +13,13 @@ strukturierte Einträge verwandelt, im Dialog bestätigt und dann in einen Googl
   reicht bis zum unteren Rand; gedrückt halten *oder* antippen/erneut tippen). Aufnahme im
   Browser → WAV 16 kHz mono → Backend → Transkription (OpenRouter) → Termin-Erkennung mit JSON-Schema
   (OpenRouter) → Bestätigungsdialog. Erst „Anlegen“ schreibt in Google. Daneben ein ⌨-Knopf zum Tippen.
+- **Foto**: Kamera-Knopf links neben dem Mikrofon. Das Gerät bietet Kamera oder Galerie an; fotografiert wird
+  z. B. eine Kalenderseite, ein Terminzettel vom Arzt oder ein (Eltern-)Brief. Der Browser verkleinert das Foto
+  (längste Seite 2048 px, JPEG), das Bildmodell aus den Einstellungen liest eine kurze Abschrift und einen oder
+  mehrere Termine ab (gleiches JSON-Schema wie bei der Sprache, plus Feld `text`). Der Bestätigungsdialog zeigt das
+  Foto als Vorschau (Tippen vergrößert), die Abschrift („Vom Foto gelesen“, bearbeitbar und neu erkennbar) und je
+  Termin eine Karte; erst „Anlegen“ schreibt in Google, „Neues Foto“ öffnet wieder die Auswahl. Termine vor heute
+  lässt das Modell weg; kommen trotzdem welche (z. B. falsches Jahr), sind sie markiert.
 - **Bearbeiten und Löschen**: Termin antippen → *Bearbeiten* (dieselbe Karte wie beim Anlegen) oder *Löschen*.
   Bei Serien wählbar: nur dieser Termin oder die ganze Serie. Geändert werden nur die Felder der Karte
   (`events.patch`); Erinnerungen, Gäste usw. bleiben. Serien mit Regeln, die die Karte nicht abbildet (z. B.
@@ -21,8 +28,8 @@ strukturierte Einträge verwandelt, im Dialog bestätigt und dann in einen Googl
   Filterleiste mit Mehrfachauswahl, im Gerät gespeichert.
 - **Wetter**: kleines Icon mit Temperatur neben der Uhr (Open-Meteo, ohne Schlüssel, über das Backend und dort
   15 Minuten zwischengespeichert). Ort und Koordinaten in den Einstellungen; ohne Ort kein Icon.
-- **Einstellungen** für die ganze Familie in Firestore: Kalender, beide Modelle (mit Vorschlägen aus der
-  OpenRouter-Modellliste), Personen, Ereignis-Tags, Sprache, Zeitzone, Standarddauer. Wirkt beim nächsten
+- **Einstellungen** für die ganze Familie in Firestore: Kalender, drei Modelle – Transkription, Termin-Erkennung,
+  Foto-Auswertung (mit Vorschlägen aus der OpenRouter-Modellliste: Audio, JSON-Schema bzw. Bild + JSON-Schema), Personen, Ereignis-Tags, Sprache, Zeitzone, Standarddauer. Wirkt beim nächsten
   Aufruf – kein Deployment.
 
 ## Modellprüfung MiMo-V2.6-Pro (Stand 2026-11-03)
@@ -40,6 +47,11 @@ jeder Anbieter jedes Format versteht. Es gibt also keinen Grund für eine Altern
 ausfällt, lassen sich in den Einstellungen andere Audio-Modelle wählen, z. B. `xiaomi/mimo-v2.6-flash`
 (deutlich günstiger) oder `google/gemini-3.5-flash`. Standard für **beide** Aufgaben ist MiMo-V2.6-Pro.
 
+Fotos (Stand 2026-11-04): MiMo-V2.6-Pro nimmt laut Modellliste auch Bilder an (`image`) und kann JSON-Schema –
+Standard daher auch für die Foto-Auswertung. Das Bild geht als Inhaltsteil `image_url` (Data-URL, base64) an
+`POST /chat/completions`. Alternativen mit Bild und JSON-Schema schlägt die Einstellungsseite vor, z. B.
+`xiaomi/mimo-v2.6-flash` oder `google/gemini-3.5-flash`.
+
 ## Aufbau
 
 ```
@@ -49,7 +61,7 @@ Browser (Tablet) ──HTTPS──▶ Cloud Run „kalender“ (ein Image)
                               └─ /api/*       FastAPI
                                    ├─ Firestore: config/settings, users/<email>
                                    ├─ Secret Manager: OpenRouter-Key, OAuth-Secret, Sitzungsschlüssel
-                                   ├─ OpenRouter: Transkription + Termin-Erkennung
+                                   ├─ OpenRouter: Transkription, Termin-Erkennung, Foto-Auswertung
                                    └─ Google Calendar API v3 (REST)
 ```
 
@@ -57,13 +69,14 @@ Browser (Tablet) ──HTTPS──▶ Cloud Run „kalender“ (ein Image)
 | --- | --- |
 | `backend/app/main.py` | API, Auslieferung der Oberfläche, Fehlerbehandlung |
 | `backend/app/auth.py` | OAuth-Anmeldung, Freigabeliste, Token-Erneuerung |
-| `backend/app/extraction.py` | Prompt, JSON-Schema, Prüfung der Modellantwort |
+| `backend/app/extraction.py` | Prompts (Sprache/Text und Foto), JSON-Schema, Prüfung der Modellantwort |
 | `backend/app/events.py` | Entwurf ↔ Google-Termin ↔ Anzeige, Tags, Wiederholung (RRULE) |
 | `backend/app/calendar_api.py` | Google Calendar über REST, lokale Attrappe |
 | `backend/app/openrouter.py` | OpenRouter-Aufrufe, Modellliste (24 Std im Speicher) |
 | `backend/app/weather.py` | aktuelles Wetter von Open-Meteo, 15 Min im Speicher |
 | `backend/app/settings.py` | Einstellungen der Familie (Firestore-Dokument `config/settings`) |
 | `frontend/src/` | React 18 + TypeScript + Vite |
+| `frontend/src/photo.ts` | Foto im Browser verkleinern (2048 px, JPEG, ohne Metadaten) |
 | `scripts/deploy.ps1` | Einrichtung und Deployment (idempotent) |
 
 **Tags im Google-Termin:** maschinenlesbar in `extendedProperties.private` (`fkPersons=lena,max`,
@@ -78,8 +91,10 @@ Tags: Sport
 Termine, die jemand in der Google-App anlegt, werden auch erkannt: über diesen Block (wer ihn von Hand schreibt)
 oder über einen Personennamen im Titel („Lena Klavier“).
 
-**Audio** bleibt nur im Arbeitsspeicher der Anfrage und wird nirgends abgelegt. Der OpenRouter-Schlüssel liegt nur
-im Secret Manager; alle KI-Aufrufe laufen über das Backend.
+**Audio und Fotos** bleiben nur im Arbeitsspeicher der Anfrage und werden nirgends abgelegt; die Vorschau im Dialog
+ist eine Object-URL im Browser, die beim Schließen verworfen wird. Beim Verkleinern fallen die Metadaten des Fotos
+(z. B. der Aufnahmeort) weg. Der OpenRouter-Schlüssel liegt nur im Secret Manager; alle KI-Aufrufe laufen über das
+Backend.
 
 ## Lokal ausführen
 
@@ -92,7 +107,8 @@ Voraussetzungen: Python 3.12+, Node 20+.
 Öffnet nichts selbst – im Browser `http://localhost:8080` aufrufen. Standard laut `backend/.env.example`:
 ohne Anmeldung (`KALENDER_AUTH=none`), Kalender als lokale Attrappe (`backend/data/store.json`), Demo-KI
 (`KALENDER_FAKE_LLM=1`: jede Aufnahme ergibt „Am Freitag um 16 Uhr hat Lena Fussball und Samstag ist Omas
-Geburtstag“). Mit Hot Reload der Oberfläche:
+Geburtstag“, jedes Foto einen Zahnarzttermin für Max am Donnerstag und einen Elternabend). Mit Hot Reload der
+Oberfläche:
 
 ```powershell
 .\scripts\dev.ps1 -Frontend
@@ -117,16 +133,20 @@ npm test
 
 - `test_extraction.py` – Beispielsätze → Modellantwort → erwartetes JSON (Abnahmesatz, „übermorgen um drei“,
   fehlende Uhrzeit wird markiert, „die Kinder“, Wiederholung, Namen statt Kennungen, mehrtägig, kein Termin),
-  dazu Prompt (Datumstabelle, Zeitzone) und Schema (nur eigene Tags).
+  dazu Prompt (Datumstabelle, Zeitzone) und Schema (nur eigene Tags); Fotos: Prompt mit Bild und Abschrift,
+  Terminzettel mit zwei Terminen, vergangener Termin wird markiert, unbrauchbare Antwort.
 - `test_calendar.py` – Schreiben in den Kalender gegen eine Attrappe der Google Calendar API
   (`httpx.MockTransport`): Request-Body, Ganztägig/Standarddauer/Mitternacht, RRULE, Seitenweise lesen,
   Fehlerfälle, Rückweg zur Anzeige.
 - `test_api.py` – Abnahme Ende zu Ende (einsprechen → bestätigen → Wochenansicht, Filter „Lena“),
-  Modellwechsel ohne Deployment, nichts erkannt, Modell nicht erreichbar, CSRF-Schutz.
+  Modellwechsel ohne Deployment, nichts erkannt, Modell nicht erreichbar, CSRF-Schutz; Foto Ende zu Ende
+  (fotografieren → bestätigen → Ansicht), Foto-Modell aus den Einstellungen, Bildformat am Inhalt erkannt,
+  falsches Format, zu groß, kein Termin auf dem Foto.
 - `test_auth.py` – Token-Erneuerung, abgelaufenes Token → neue Anmeldung, Pflichtangaben im Cloud-Betrieb.
 - `test_weather.py` – Open-Meteo-Abruf (Attrappe), Zwischenspeicher mit Rückfall auf den letzten Stand, Ort aus
   den Einstellungen.
-- `frontend/src/logic.test.ts` – Wochenrechnung, Filter, Überschneidungen, ganztägige Balken, Wettersymbole.
+- `frontend/src/logic.test.ts` – Wochenrechnung, Filter, Überschneidungen, ganztägige Balken, Wettersymbole,
+  Maße beim Verkleinern der Fotos.
 - `test_extraction_live.py` – dieselben Sätze gegen das echte Modell (nur auf Wunsch, kostet Cent-Beträge):
 
 ```powershell
@@ -235,7 +255,8 @@ der App lässt sie sich auch direkt aus der Liste wählen.
 ### Kosten
 
 Cloud Run, Firestore, Secret Manager und Artifact Registry bleiben bei Familiennutzung im Gratiskontingent.
-Echte Kosten entstehen nur bei OpenRouter (eine Aufnahme mit MiMo-V2.6-Pro: deutlich unter einem Cent). Budget
+Echte Kosten entstehen nur bei OpenRouter (eine Aufnahme oder ein Foto mit MiMo-V2.6-Pro: deutlich unter einem
+Cent). Budget
 mit Warnung empfohlen:
 
 ```powershell
@@ -250,6 +271,8 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | Kein Mikrofonzugriff / kein Mikrofon / kein HTTPS | Meldung mit Knopf „Text eingeben“ |
 | Modell nicht erreichbar, Schlüssel ungültig, Guthaben leer, Modell-ID falsch | Meldung mit dem Modellnamen (HTTP 502) |
 | Nichts verstanden / kein Termin erkannt | Hinweis im Dialog, Text lässt sich bearbeiten und neu erkennen |
+| Foto unleserlich / kein Termin auf dem Foto | Hinweis im Dialog mit Foto und Abschrift; „Neues Foto“ oder Text ergänzen |
+| Bild lässt sich nicht öffnen, falsches Format, über 10 MB | Meldung (JPEG, PNG oder WebP wählen) |
 | Google-Token abgelaufen oder widerrufen | Banner „Die Google-Anmeldung ist abgelaufen“ mit „Erneut anmelden“ |
 | Kalender-ID falsch oder ohne Schreibrecht | Meldung mit Hinweis auf die Einstellungen |
 | Server nicht erreichbar | letzter Stand bleibt sichtbar, Fußzeile „offline“ |
@@ -276,4 +299,10 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | Mikrofon-Knopf als Overlay (4 rem), Hinweistext nur während Aufnahme und Auswertung, „Stand“-Zeile klein unten links; *Termine* lässt unten Platz zum Hervorscrollen | Auftrag „Overlay, Kalender bis zum unteren Rand, Knopf etwas kleiner“; der Ruhe-Hinweis hätte Termine verdeckt und steht weiter als Tooltip am Knopf. |
 | Jede Änderung direkt nach `main` und sofort deployen | Auftrag „ohne Nachfragen“; Familien-App mit einem Entwickler, Fehler lassen sich mit dem nächsten Deployment schnell beheben. |
 | Deploy-Parameter aus dem laufenden Dienst statt im Repo | Repo ist öffentlich; E-Mail-Adressen und Client-ID gehören nicht hinein. |
+| Foto über die Auswahl des Geräts (`<input type="file" accept="image/*">` ohne `capture`) statt eigener Kameravorschau | Die Kamera-App fokussiert und belichtet Dokumente besser; ohne `capture` gehen auch Fotos aus der Galerie oder vom Messenger. |
+| Foto im Browser auf 2048 px (JPEG 85 %) verkleinern, Server nimmt höchstens 10 MB | reicht für Handschrift auf einer Kalenderseite, spart Upload und Bild-Token; entfernt nebenbei die Metadaten (Aufnahmeort). |
+| Eigenes Modellfeld `photo_model`, Standard `xiaomi/mimo-v2.6-pro` | Auftrag „Modell in der Config hinterlegen“; laut OpenRouter-Modellliste mit Bild-Eingabe und JSON-Schema, wie die anderen beiden Standardmodelle. |
+| Foto-Antwort mit Abschrift `text` vor den Terminen; „Neu erkennen“ nach Bearbeiten geht über den Text-Weg | Die Familie sieht, was gelesen wurde, und kann Lesefehler im Text korrigieren, ohne neu zu fotografieren; derselbe Dialog wie bei der Sprache. |
+| Termine vor heute lässt das Modell weg; geliefert werden sie markiert statt verworfen | Kalenderblätter zeigen auch Vergangenes; ein falsch geratenes Jahr soll aber nicht still verschwinden. |
+| Bildformat am Dateianfang erkennen (JPEG, PNG, WebP, GIF) | Dateiname und Content-Type vom Browser sind unzuverlässig (z. B. „.heic“ nach der Umwandlung). |
 | Lokale Kalender-Attrappe zeigt Serien nur mit dem ersten Termin | Google expandiert Serien selbst (`singleEvents=true`); die Attrappe dient nur der Entwicklung. |

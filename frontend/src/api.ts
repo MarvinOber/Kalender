@@ -54,6 +54,11 @@ export const api = {
     form.append("audio", wav, "aufnahme.wav");
     return request<ParseResult>("POST", "/api/voice", form);
   },
+  photo: (image: Blob) => {
+    const form = new FormData();
+    form.append("image", image, "foto.jpg"); // das Format erkennt der Server am Inhalt
+    return request<ParseResult>("POST", "/api/photo", form);
+  },
   parse: (text: string) => request<ParseResult>("POST", "/api/parse", { text }),
   create: (events: Draft[]) => request<{ created: CalEvent[] }>("POST", "/api/events", { events }),
   event: (id: string, scope: EditScope) =>

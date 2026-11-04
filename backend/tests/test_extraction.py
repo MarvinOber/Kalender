@@ -9,9 +9,17 @@ from __future__ import annotations
 
 import pytest
 
-from app.extraction import build_messages, build_schema, extract_events
+from app.extraction import (
+    PAST_HINT,
+    PHOTO_REQUEST,
+    build_messages,
+    build_photo_messages,
+    build_schema,
+    extract_events,
+    extract_events_from_photo,
+)
 
-from .conftest import NOW, ScriptedLlm
+from .conftest import NOW, PHOTO, ScriptedLlm
 
 
 def ev(**kw):
@@ -145,3 +153,49 @@ def test_schema_erlaubt_nur_eigene_tags(settings):
     assert item["tags"]["items"]["enum"] == ["schule", "arzt", "sport", "geburtstag", "arbeit", "freizeit"]
     settings.persons = []
     assert build_schema(settings)["properties"]["events"]["items"]["properties"]["persons"]["maxItems"] == 0
+
+
+# ---------- Fotos ----------
+
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 200
+
+
+def test_foto_prompt_mit_bild_und_abschrift(settings):
+    messages = build_photo_messages(JPEG, "image/jpeg", settings, NOW)
+    system, user = messages[0]["content"], messages[1]["content"]
+    assert "Dienstag, 2026-11-03, 14:00 Uhr" in system and "Donnerstag 2026-11-05 (übermorgen)" in system
+    assert "Terminzettel" in system and "vor heute liegen, weglassen" in system
+    assert 'id "max": Max' in system
+    assert user[0] == {"type": "text", "text": PHOTO_REQUEST}
+    assert user[1]["image_url"]["url"].startswith("data:image/jpeg;base64,/9j/")
+    schema = build_schema(settings, with_text=True)
+    assert list(schema["properties"]) == ["text", "events"] and schema["required"] == ["text", "events"]
+
+
+def test_foto_terminzettel(settings):
+    answer = {"text": "Do 05.11. 15:30 Kontrolle, Max\nDo 19.11. 09:00 Zahnreinigung, Max", "events": [
+        ev(title="Kontrolle Zahnarzt", start_date="2026-11-05", start_time="15:30", persons=["Max"], tags=["arzt"],
+           location="Praxis Dr. Weiß", description="Versichertenkarte mitbringen"),
+        ev(title="Zahnreinigung", start_date="2026-11-19", start_time="09:00", persons=["max"], tags=["arzt"]),
+    ]}
+    llm = ScriptedLlm({PHOTO: answer})
+    settings.photo_model = "google/gemini-3.5-flash"
+    text, drafts = extract_events_from_photo(llm, JPEG, "image/jpeg", settings, NOW)
+    assert text.startswith("Do 05.11. 15:30 Kontrolle")
+    assert [(d.title, d.start_date.isoformat(), d.persons, d.uncertain) for d in drafts] == [
+        ("Kontrolle Zahnarzt", "2026-11-05", ["max"], []), ("Zahnreinigung", "2026-11-19", ["max"], [])]
+    assert drafts[0].description == "Versichertenkarte mitbringen"
+    assert llm.calls[0]["model"] == "google/gemini-3.5-flash"
+
+
+def test_foto_vergangener_termin_wird_markiert(settings):
+    # z. B. Kalenderblatt ohne Jahr, das Modell nimmt das falsche Jahr
+    answer = {"text": "12.10. Laternenumzug", "events": [ev(title="Laternenumzug", start_date="2026-10-12",
+                                                                start_time="17:00")]}
+    _, [draft] = extract_events_from_photo(ScriptedLlm({PHOTO: answer}), JPEG, "image/jpeg", settings, NOW)
+    assert draft.uncertain == ["start_date"] and draft.hint == PAST_HINT
+
+
+def test_foto_ohne_abschrift_und_kaputte_antwort(settings):
+    assert extract_events_from_photo(ScriptedLlm({PHOTO: "Kein Kalender zu sehen."}), JPEG, "image/jpeg",
+                                     settings, NOW) == ("", [])

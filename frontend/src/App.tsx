@@ -14,6 +14,7 @@ import { WeekView } from "./components/WeekView";
 import { nowIn } from "./dates";
 import { type Filter, loadFilter, matches, pruneFilter, saveFilter } from "./filter";
 import { setLanguage, t } from "./i18n";
+import { prepareImage } from "./photo";
 import { MAX_SECONDS, MicError, Recorder } from "./recorder";
 import type { CalEvent, EditScope, Me, ParseResult, Settings, Weather } from "./types";
 import { type View, inRange, loadView, rangeOf, samePeriod, saveView, step } from "./view";
@@ -44,6 +45,9 @@ export function App() {
   const [seconds, setSeconds] = useState(0);
   const [result, setResultState] = useState<ParseResult | null>(null);
   const [resultKey, setResultKey] = useState(0);
+  const [photo, setPhoto] = useState<string | null>(null); // Object-URL des Fotos zum aktuellen Ergebnis
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoInput = useRef<HTMLInputElement>(null);
   const [details, setDetails] = useState<CalEvent | null>(null);
   const [editing, setEditing] = useState<{ id: string; scope: EditScope } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -52,11 +56,18 @@ export function App() {
   const recorder = useRef<Recorder | null>(null);
   const idleTimer = useRef<number>();
 
-  // Jedes neue Ergebnis baut den Dialog frisch auf (eigene Bearbeitungen gelten nur für dieses Ergebnis)
+  // Jedes neue Ergebnis baut den Dialog frisch auf (eigene Bearbeitungen gelten nur für dieses Ergebnis).
+  // Schließen verwirft auch das Foto; „Neu erkennen“ mit geändertem Text behält es.
   const setResult = useCallback((r: ParseResult | null) => {
     setResultKey((k) => k + 1);
     setResultState(r);
+    if (!r) setPhoto(null);
   }, []);
+
+  // Das Foto lebt nur im Browser, solange der Dialog offen ist
+  useEffect(() => () => {
+    if (photo) URL.revokeObjectURL(photo);
+  }, [photo]);
 
   const tz = settings?.timezone || "Europe/Berlin";
   const today = now.date;
@@ -272,6 +283,31 @@ export function App() {
     [showError, setResult],
   );
 
+  // ---------- Foto ----------
+  const takePhoto = useCallback(
+    async (file: File) => {
+      if (mic !== "idle") return;
+      setResult(null);
+      setMic("processing");
+      setPhotoBusy(true);
+      try {
+        const image = await prepareImage(file);
+        const res = await api.photo(image);
+        setPhoto(URL.createObjectURL(image));
+        setResult(res);
+      } catch (err) {
+        showError(err);
+      } finally {
+        setMic("idle");
+        setPhotoBusy(false);
+      }
+    },
+    [mic, showError, setResult],
+  );
+
+  // Muss direkt im Klick laufen, sonst öffnet der Browser die Kamera nicht
+  const choosePhoto = useCallback(() => photoInput.current?.click(), []);
+
   const created = useCallback(
     (list: CalEvent[]) => {
       setResult(null);
@@ -364,17 +400,34 @@ export function App() {
         onStart={startRecording}
         onStop={stopRecording}
         onType={() => setResult({ transcript: "", events: [], message: "" })}
+        onPhoto={choosePhoto}
+        busyLabel={photoBusy ? t("Lese das Foto …") : undefined}
+      />
+      {/* Ohne „capture“: Das Gerät bietet Kamera und Galerie an (auch Fotos, die per Messenger kamen) */}
+      <input
+        ref={photoInput}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = ""; // dasselbe Foto lässt sich erneut wählen
+          if (file) takePhoto(file);
+        }}
       />
       {result && (
         <ConfirmDialog
           key={resultKey}
           result={result}
+          photo={photo}
           settings={settings}
           busy={mic === "processing"}
           onCancel={() => setResult(null)}
           onRetry={() => {
+            const fromPhoto = !!photo;
             setResult(null);
-            startRecording();
+            if (fromPhoto) choosePhoto();
+            else startRecording();
           }}
           onReparse={reparse}
           onCreated={created}

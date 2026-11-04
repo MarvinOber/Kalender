@@ -4,10 +4,14 @@ Das Modell bekommt das heutige Datum in der Familien-Zeitzone und eine Tabelle d
 Wochentagen – „nächsten Dienstag“ oder „übermorgen“ muss es dann nicht selbst ausrechnen, nur nachschlagen.
 Personen und Ereignis-Tags sind im Schema als feste Liste vorgegeben; was das Modell trotzdem Fremdes
 liefert, fällt in ``normalize`` heraus. Fehlt eine Angabe, wird das Feld markiert statt geraten.
+
+Fotos (Kalenderseite, Terminzettel, Brief) gehen mit demselben Kontext an ein Bildmodell; es liefert zusätzlich
+eine kurze Abschrift (``text``), die der Dialog zeigt und die sich bearbeitet neu erkennen lässt.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 from datetime import date, datetime, time, timedelta
@@ -34,7 +38,7 @@ def _id_list(ids: list[str]) -> dict[str, Any]:
     return {"type": "array", "items": {"type": "string", "enum": ids}}
 
 
-def build_schema(settings: Settings) -> dict[str, Any]:
+def build_schema(settings: Settings, with_text: bool = False) -> dict[str, Any]:
     recurrence = {
         "type": ["object", "null"],
         "properties": {
@@ -68,6 +72,14 @@ def build_schema(settings: Settings) -> dict[str, Any]:
                      "description", "persons", "tags", "recurrence", "uncertain", "hint"],
         "additionalProperties": False,
     }
+    if with_text:
+        # Abschrift zuerst: Das Modell liest erst ab und ordnet dann zu
+        return {
+            "type": "object",
+            "properties": {"text": {"type": "string"}, "events": {"type": "array", "items": event}},
+            "required": ["text", "events"],
+            "additionalProperties": False,
+        }
     return {
         "type": "object",
         "properties": {"events": {"type": "array", "items": event}},
@@ -85,7 +97,8 @@ def _date_table(today: date) -> str:
     return "\n".join(rows)
 
 
-def build_messages(text: str, settings: Settings, now: datetime) -> list[dict[str, Any]]:
+def _context(settings: Settings, now: datetime) -> str:
+    """Heute, Datumstabelle, Personen und Tags – gleich für Sprache, Text und Foto."""
     now = now.astimezone(settings.tz)
     today = now.date()
     week_start = today - timedelta(days=today.weekday())
@@ -95,9 +108,7 @@ def build_messages(text: str, settings: Settings, now: datetime) -> list[dict[st
     tags = "\n".join(
         f'- id "{t.id}": {t.name}' + (f" (z. B. {', '.join(t.aliases)})" if t.aliases else "")
         for t in settings.event_tags) or "- (keine)"
-    lang = "Deutsch" if settings.language == "de" else "Englisch"
-    system = f"""Du trägst Termine in einen Familienkalender ein. Wandle die gesprochene Eingabe in Termine um.
-
+    return f"""\
 Jetzt ist {WEEKDAY_DE[today.weekday()]}, {today.isoformat()}, {now:%H:%M} Uhr (Zeitzone {settings.timezone}).
 Diese Woche geht von Montag {week_start.isoformat()} bis Sonntag {(week_start + timedelta(days=6)).isoformat()}.
 
@@ -108,11 +119,62 @@ Familienmitglieder (Feld "persons", nur diese ids):
 {persons}
 
 Ereignis-Tags (Feld "tags", nur diese ids):
-{tags}
+{tags}"""
+
+
+def _lang(settings: Settings) -> str:
+    return "Deutsch" if settings.language == "de" else "Englisch"
+
+
+def build_messages(text: str, settings: Settings, now: datetime) -> list[dict[str, Any]]:
+    system = f"""Du trägst Termine in einen Familienkalender ein. Wandle die gesprochene Eingabe in Termine um.
+
+{_context(settings, now)}
 
 Regeln:
 - Eine Eingabe kann mehrere Termine enthalten: für jeden Termin ein eigener Eintrag.
   Kein Termin erkennbar → leere Liste.
+{_rules(_lang(settings))}"""
+    return [{"role": "system", "content": system}, {"role": "user", "content": text}]
+
+
+PHOTO_REQUEST = "Lies die Termine von diesem Foto ab."
+
+
+def build_photo_messages(image: bytes, mime: str, settings: Settings, now: datetime) -> list[dict[str, Any]]:
+    lang = _lang(settings)
+    system = f"""Du trägst Termine in einen Familienkalender ein. Lies die Termine von einem Foto ab – z. B. einer
+Kalenderseite, einem Terminzettel (Arzt, Zahnarzt, Friseur), einem Brief oder Elternbrief, einer Einladung oder
+einem Aushang.
+
+{_context(settings, now)}
+
+Regeln für das Foto:
+- Jeden Termin auf dem Foto als eigenen Eintrag aufnehmen (jede Zeile eines Terminzettels, jeden Eintrag einer
+  Kalenderseite). Kein Termin erkennbar → leere Liste.
+- Termine, die vor heute liegen, weglassen.
+- Datum ohne Jahr: Jahr aus dem Foto nehmen (Kalenderblatt, Datum des Briefs), sonst das nächste solche Datum ab heute.
+- Kalenderseite: Ein Eintrag gehört zu dem Tag, in dessen Feld er steht; Monat und Jahr stehen meist oben.
+- Passen Wochentag und Datum nicht zusammen: dem Datum folgen, "start_date" in "uncertain" und im hint nennen.
+- Handschrift sorgfältig lesen. Unleserliches nicht raten: Feld in "uncertain" und im hint nennen.
+- location: Name und Adresse von Praxis, Schule oder Veranstaltungsort, wenn angegeben.
+- description: wichtige Hinweise vom Foto knapp übernehmen (z. B. "Versichertenkarte mitbringen",
+  "Absagen bis 24 Std. vorher, Tel. …"), sonst "".
+- persons: Namen auf dem Foto (Patient, Schülerin, Eingeladener) den Familienmitgliedern zuordnen.
+- text: kurze Abschrift auf {lang} der Stellen, aus denen du die Termine gelesen hast, je Termin eine Zeile
+  (z. B. "Do 12.11. 15:30 Kontrolle Zahnarzt, Max"), ohne Werbung, Versicherten- und Kontonummern.
+  Ist kein Text lesbar: "".
+
+Allgemeine Regeln:
+{_rules(lang)}"""
+    url = f"data:{mime};base64,{base64.b64encode(image).decode('ascii')}"
+    content = [{"type": "text", "text": PHOTO_REQUEST}, {"type": "image_url", "image_url": {"url": url}}]
+    return [{"role": "system", "content": system}, {"role": "user", "content": content}]
+
+
+def _rules(lang: str) -> str:
+    """Regeln für Datum, Uhrzeit, Zuordnung und Markierung – gleich für Sprache, Text und Foto."""
+    return f"""\
 - Relative Angaben immer über die Tabelle auflösen. "am Freitag" / "Freitag" / "nächsten Freitag" = der nächste
   Freitag nach heute. "übermorgen" = heute + 2 Tage. "nächste Woche Dienstag" = Dienstag der Woche nach dieser Woche.
 - Uhrzeiten im 24-Stunden-Format. "um drei" bei einem Termin am Tag = 15:00, "halb vier" = 15:30,
@@ -134,7 +196,6 @@ Regeln:
   Wöchentlich mit Wochentagen in by_day; until bzw. count nur, wenn ein Ende genannt wird.
 - hint: kurzer Satz auf {lang}, was unklar ist; sonst "".
 - Felder, die du nicht sicher bestimmen konntest, in "uncertain" aufnehmen."""
-    return [{"role": "system", "content": system}, {"role": "user", "content": text}]
 
 
 def _parse_json(raw: str) -> dict[str, Any]:
@@ -251,3 +312,23 @@ def extract_events(llm: LlmClient, text: str, settings: Settings, now: datetime)
         return []
     raw = llm.complete_json(settings.extraction_model, build_messages(text, settings, now), build_schema(settings))
     return normalize(_parse_json(raw), settings)
+
+
+PAST_HINT = "Das Datum liegt in der Vergangenheit – bitte prüfen."
+
+
+def extract_events_from_photo(llm: LlmClient, image: bytes, mime: str, settings: Settings,
+                              now: datetime) -> tuple[str, list[EventDraft]]:
+    """Foto → (Abschrift, Entwürfe). Vergangene Termine bleiben drin, werden aber markiert (falsches Jahr?)."""
+    raw = llm.complete_json(settings.photo_model, build_photo_messages(image, mime, settings, now),
+                            build_schema(settings, with_text=True))
+    data = _parse_json(raw)
+    text = data.get("text")
+    drafts = normalize(data, settings)
+    today = now.astimezone(settings.tz).date()
+    for d in drafts:
+        last = d.end_date or d.start_date
+        if last and last < today and d.recurrence is None:
+            d.uncertain = sorted({*d.uncertain, "start_date"}, key=FIELDS.index)
+            d.hint = d.hint or PAST_HINT
+    return (text.strip() if isinstance(text, str) else ""), drafts

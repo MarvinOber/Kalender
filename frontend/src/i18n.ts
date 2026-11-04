@@ -106,6 +106,17 @@ const EN: Record<string, string> = {
   "Gelöscht": "Deleted",
   "Diese Wiederholung lässt sich nur in Google Kalender ändern; sie bleibt unverändert.":
     "This repeat rule can only be changed in Google Calendar; it stays as it is.",
+  "Foto aufnehmen": "Take a photo",
+  "Lese das Foto …": "Reading the photo …",
+  "Vom Foto gelesen": "Read from the photo",
+  "Neues Foto": "New photo",
+  "Foto": "Photo",
+  "Foto vergrößern": "Enlarge photo",
+  "Foto verkleinern": "Shrink photo",
+  "Foto-Auswertung (Bild)": "Photo recognition (image)",
+  "Dieses Bild lässt sich nicht öffnen. Bitte ein Foto als JPEG oder PNG wählen.":
+    "This image cannot be opened. Please choose a JPEG or PNG photo.",
+  "Das Foto ist zu groß (höchstens 10 MB).": "The photo is too large (10 MB at most).",
 };
 
 let lang: "de" | "en" = "de";

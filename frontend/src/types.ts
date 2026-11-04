@@ -15,6 +15,7 @@ export interface Settings {
   calendar_id: string;
   transcription_model: string;
   extraction_model: string;
+  photo_model: string; // Fotos von Kalenderseiten, Terminzetteln, Briefen
   language: "de" | "en";
   timezone: string;
   default_duration_min: number;
@@ -103,6 +104,7 @@ export interface ModelInfo {
   id: string;
   name: string;
   audio: boolean;
+  image: boolean;
   structured: boolean;
   prompt_price: string | null;
 }

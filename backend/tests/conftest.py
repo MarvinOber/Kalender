@@ -20,6 +20,7 @@ from app.settings import default_settings  # noqa: E402
 BERLIN = ZoneInfo("Europe/Berlin")
 # Dienstag, 3. November 2026, 14:00 – fester „Jetzt“-Zeitpunkt aller Tests
 NOW = datetime(2026, 11, 3, 14, 0, tzinfo=BERLIN)
+PHOTO = "<foto>"  # Schlüssel in ScriptedLlm.answers für die Antwort auf ein Foto
 
 
 class ScriptedLlm:
@@ -36,6 +37,8 @@ class ScriptedLlm:
 
     def complete_json(self, model: str, messages: list[dict[str, Any]], schema: dict[str, Any]) -> str:
         text = messages[-1]["content"]
+        if isinstance(text, list):  # Foto: Antwort unter dem Schlüssel PHOTO
+            text = PHOTO
         self.calls.append({"kind": "json", "model": model, "messages": messages, "schema": schema})
         answer = self.answers.get(text, {"events": []})
         return answer if isinstance(answer, str) else json.dumps(answer)

@@ -35,6 +35,7 @@ export function SettingsPanel({ settings, me, onClose, onSaved, onError }: Props
 
   const audioModels = useMemo(() => (models ?? []).filter((m) => m.audio), [models]);
   const structuredModels = useMemo(() => (models ?? []).filter((m) => m.structured), [models]);
+  const imageModels = useMemo(() => (models ?? []).filter((m) => m.image && m.structured), [models]);
   const timezones = useMemo(() => {
     try {
       return (Intl as any).supportedValuesOf("timeZone") as string[];
@@ -131,14 +132,22 @@ export function SettingsPanel({ settings, me, onClose, onSaved, onError }: Props
               <input list="structured-models" value={s.extraction_model} onChange={(e) => setS({ ...s, extraction_model: e.target.value })} />
               <ModelList id="structured-models" models={structuredModels} />
             </label>
+            <label className="field">
+              <span>{t("Foto-Auswertung (Bild)")}</span>
+              <input list="image-models" value={s.photo_model} onChange={(e) => setS({ ...s, photo_model: e.target.value })} />
+              <ModelList id="image-models" models={imageModels} />
+            </label>
             <p className="small">
               {models === null
                 ? "Modellliste wird geladen …"
                 : models.length
-                  ? `OpenRouter-Modell-ID. Vorschläge: ${audioModels.length} Modelle mit Audio-Eingabe bzw. ${structuredModels.length} mit JSON-Schema.`
+                  ? `OpenRouter-Modell-ID. Vorschläge: ${audioModels.length} Modelle mit Audio-Eingabe, ${structuredModels.length} mit JSON-Schema, ${imageModels.length} mit Bild-Eingabe und JSON-Schema.`
                   : "Modellliste nicht erreichbar – Modell-ID von openrouter.ai/models eintragen."}
               {models?.length && s.transcription_model && !audioModels.some((m) => m.id === s.transcription_model)
                 ? " ⚠ Das Transkriptionsmodell nimmt laut Liste kein Audio an."
+                : ""}
+              {models?.length && s.photo_model && !imageModels.some((m) => m.id === s.photo_model)
+                ? " ⚠ Das Foto-Modell nimmt laut Liste keine Bilder an oder kann kein JSON-Schema."
                 : ""}
             </p>
           </section>

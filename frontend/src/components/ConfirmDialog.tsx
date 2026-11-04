@@ -7,6 +7,8 @@ import { colorVar } from "./eventStyle";
 
 interface Props {
   result: ParseResult;
+  /** Adresse des Fotos (Object-URL), wenn die Termine von einem Foto stammen */
+  photo?: string | null;
   settings: Settings;
   busy: boolean;
   onCancel: () => void;
@@ -35,12 +37,16 @@ export function missing(d: Draft): Record<string, string> {
   return m;
 }
 
-/** Bestätigungsdialog: Transkript und je Termin eine bearbeitbare Karte. Erst „Anlegen“ schreibt in Google. */
-export function ConfirmDialog({ result, settings, busy, onCancel, onRetry, onReparse, onCreated, onError }: Props) {
+/**
+ * Bestätigungsdialog: Transkript (bzw. Foto mit Abschrift) und je Termin eine bearbeitbare Karte.
+ * Erst „Anlegen“ schreibt in Google.
+ */
+export function ConfirmDialog({ result, photo, settings, busy, onCancel, onRetry, onReparse, onCreated, onError }: Props) {
   const [drafts, setDrafts] = useState<Draft[]>(() => result.events.map(normalizeTimes));
   const [text, setText] = useState(result.transcript);
   const [saving, setSaving] = useState(false);
   const [tried, setTried] = useState(false);
+  const [zoom, setZoom] = useState(false);
   const textChanged = text.trim() !== result.transcript.trim();
 
   const update = (i: number, patch: Partial<Draft>) =>
@@ -77,11 +83,22 @@ export function ConfirmDialog({ result, settings, busy, onCancel, onRetry, onRep
         </header>
 
         <div className="sheet-body">
+          {photo && (
+            <button
+              type="button"
+              className={`photo-preview ${zoom ? "zoom" : ""}`}
+              aria-label={zoom ? t("Foto verkleinern") : t("Foto vergrößern")}
+              aria-pressed={zoom}
+              onClick={() => setZoom((z) => !z)}
+            >
+              <img src={photo} alt={t("Foto")} />
+            </button>
+          )}
           <label className="transcript">
-            <span>{result.transcript ? t("Gesagt") : t("Text eingeben")}</span>
+            <span>{photo ? t("Vom Foto gelesen") : result.transcript ? t("Gesagt") : t("Text eingeben")}</span>
             <textarea
               value={text}
-              rows={2}
+              rows={photo ? 3 : 2}
               placeholder="z. B. Am Freitag um 16 Uhr hat Lena Fußball"
               onChange={(e) => setText(e.target.value)}
             />
@@ -113,7 +130,7 @@ export function ConfirmDialog({ result, settings, busy, onCancel, onRetry, onRep
             {t("Abbrechen")}
           </button>
           <button className="btn" onClick={onRetry}>
-            🎤 {t("Neu einsprechen")}
+            {photo ? `📷 ${t("Neues Foto")}` : `🎤 ${t("Neu einsprechen")}`}
           </button>
           <button className="btn primary" disabled={saving || !drafts.length || (tried && invalid)} onClick={create}>
             {saving ? "…" : `${t("Anlegen")}${drafts.length > 1 ? ` (${drafts.length})` : ""}`}

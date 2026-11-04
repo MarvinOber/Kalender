@@ -28,7 +28,7 @@ from .events import (
     to_google_patch,
     validate_draft,
 )
-from .extraction import extract_events
+from .extraction import extract_events, extract_events_from_photo
 from .fake_llm import FakeLlm
 from .openrouter import LlmClient, OpenRouter, list_models
 from .server_config import get_config
@@ -38,6 +38,7 @@ from .weather import WeatherClient, get_weather
 log = logging.getLogger("kalender")
 MAX_AUDIO_BYTES = 15 * 1024 * 1024
 AUDIO_FORMATS = {"wav", "mp3", "ogg", "flac", "m4a", "aac", "webm"}
+MAX_IMAGE_BYTES = 10 * 1024 * 1024  # die Oberfläche verkleinert vorher auf 2048 px (meist unter 1 MB)
 
 cfg = get_config()
 app = FastAPI(title="Familienkalender", docs_url=None, redoc_url=None, openapi_url=None)
@@ -189,6 +190,40 @@ async def voice(audio: UploadFile = File(...), _: User = CurrentUser, settings: 
     del data
     drafts = extract_events(llm, transcript, settings, now)
     return _drafts_response(transcript, drafts)
+
+
+def image_type(data: bytes) -> str | None:
+    """Bildformat am Dateianfang erkennen – Dateiname und Content-Type kommen vom Browser und sagen wenig."""
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    return None
+
+
+@app.post("/api/photo")
+async def photo(image: UploadFile = File(...), _: User = CurrentUser, settings: Settings = Depends(settings_dep),
+                llm: LlmClient = Depends(llm_dep), now: datetime = Depends(now_dep)) -> dict[str, Any]:
+    """Foto einer Kalenderseite, eines Terminzettels oder Briefs → Abschrift und erkannte Termine."""
+    # Das Foto bleibt nur im Arbeitsspeicher dieser Anfrage – es wird nirgends abgelegt.
+    data = await image.read(MAX_IMAGE_BYTES + 1)
+    if len(data) > MAX_IMAGE_BYTES:
+        raise AppError(413, "too_large", "Das Foto ist zu groß (höchstens 10 MB).")
+    mime = image_type(data)
+    if not mime:
+        raise AppError(415, "image_format", "Dieses Bildformat wird nicht unterstützt. Bitte ein Foto als JPEG, "
+                                            "PNG oder WebP wählen.")
+    text, drafts = extract_events_from_photo(llm, data, mime, settings, now)
+    del data
+    message = ""
+    if not drafts:
+        message = ("Auf dem Foto wurde kein Termin erkannt." if text else
+                   "Auf dem Foto war nichts zu lesen. Bitte näher heran, gerade und gut beleuchtet fotografieren.")
+    return {"transcript": text, "events": [d.model_dump(mode="json") for d in drafts], "message": message}
 
 
 @app.post("/api/parse")
