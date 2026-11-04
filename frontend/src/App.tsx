@@ -14,7 +14,7 @@ import { WeekView } from "./components/WeekView";
 import { nowIn } from "./dates";
 import { type Filter, loadFilter, matches, pruneFilter, saveFilter } from "./filter";
 import { setLanguage, t } from "./i18n";
-import { prepareImage } from "./photo";
+import { prepareImage, type PhotoSource } from "./photo";
 import { MAX_SECONDS, MicError, Recorder } from "./recorder";
 import type { CalEvent, EditScope, Me, ParseResult, Settings, Weather } from "./types";
 import { type View, inRange, loadView, rangeOf, samePeriod, saveView, step } from "./view";
@@ -50,7 +50,9 @@ export function App() {
   const [resultKey, setResultKey] = useState(0);
   const [photo, setPhoto] = useState<string | null>(null); // Object-URL des Fotos zum aktuellen Ergebnis
   const [photoBusy, setPhotoBusy] = useState(false);
-  const photoInput = useRef<HTMLInputElement>(null);
+  const cameraInput = useRef<HTMLInputElement>(null);
+  const galleryInput = useRef<HTMLInputElement>(null);
+  const photoSource = useRef<PhotoSource>("gallery"); // „Neues Foto“ im Dialog nimmt denselben Weg
   const [details, setDetails] = useState<CalEvent | null>(null);
   const [editing, setEditing] = useState<{ id: string; scope: EditScope } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -310,8 +312,16 @@ export function App() {
     [mic, showError, setResult],
   );
 
-  // Muss direkt im Klick laufen, sonst öffnet der Browser die Kamera nicht
-  const choosePhoto = useCallback(() => photoInput.current?.click(), []);
+  // Muss direkt im Klick laufen, sonst öffnet der Browser Kamera bzw. Galerie nicht
+  const choosePhoto = useCallback((source: PhotoSource) => {
+    photoSource.current = source;
+    (source === "camera" ? cameraInput : galleryInput).current?.click();
+  }, []);
+  const photoChosen = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // dasselbe Foto lässt sich erneut wählen
+    if (file) takePhoto(file);
+  };
 
   const created = useCallback(
     (list: CalEvent[]) => {
@@ -408,18 +418,10 @@ export function App() {
         onPhoto={choosePhoto}
         busyLabel={photoBusy ? t("Lese das Foto …") : undefined}
       />
-      {/* Ohne „capture“: Das Gerät bietet Kamera und Galerie an (auch Fotos, die per Messenger kamen) */}
-      <input
-        ref={photoInput}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = ""; // dasselbe Foto lässt sich erneut wählen
-          if (file) takePhoto(file);
-        }}
-      />
+      {/* „capture“ öffnet auf Handy und Tablet direkt die Rückkamera; ohne „capture“ die Galerie (auch Fotos,
+          die per Messenger kamen). Viele Android-Geräte zeigen ohne „capture“ nur die Galerie. */}
+      <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={photoChosen} />
+      <input ref={galleryInput} type="file" accept="image/*" hidden onChange={photoChosen} />
       {result && (
         <ConfirmDialog
           key={resultKey}
@@ -431,7 +433,7 @@ export function App() {
           onRetry={() => {
             const fromPhoto = !!photo;
             setResult(null);
-            if (fromPhoto) choosePhoto();
+            if (fromPhoto) choosePhoto(photoSource.current);
             else startRecording();
           }}
           onReparse={reparse}

@@ -1,5 +1,16 @@
 import { t } from "./i18n";
 
+/** Woher das Foto kommt: „camera“ öffnet die Kamera direkt (`capture`), „gallery“ die Bildauswahl des Geräts. */
+export type PhotoSource = "camera" | "gallery";
+
+/**
+ * Nur Touch-Geräte (Handy, Tablet) öffnen bei `capture` die Kamera; Desktop-Browser ignorieren es und zeigen
+ * den Dateidialog. Dort gibt es deshalb keine Auswahl, der Knopf öffnet gleich die Dateien.
+ */
+export function cameraAvailable(): boolean {
+  return typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
+}
+
 /** Längste Seite nach dem Verkleinern: reicht für Handschrift auf einer Kalenderseite, bleibt meist unter 1 MB. */
 export const MAX_SIDE = 2048;
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // wie MAX_IMAGE_BYTES im Backend

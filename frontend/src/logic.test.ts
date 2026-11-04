@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { addDays, addMonths, isoWeek, mondayOf, nowIn, rangeLabel } from "./dates";
 import { matches, pruneFilter } from "./filter";
 import { allDayBars, dayItems, timedSegments, visibleHours } from "./layout";
-import { fitWithin } from "./photo";
+import { cameraAvailable, fitWithin } from "./photo";
 import type { CalEvent } from "./types";
 import { inRange, rangeOf, samePeriod, step } from "./view";
 import { weatherSymbol } from "./weather";
@@ -181,5 +181,16 @@ describe("Foto", () => {
   it("lässt kleine Bilder unverändert", () => {
     expect(fitWithin(1200, 900)).toEqual({ width: 1200, height: 900 });
     expect(fitWithin(2048, 2048)).toEqual({ width: 2048, height: 2048 });
+  });
+  it("bietet die Kamera nur auf Touch-Geräten an", () => {
+    expect(cameraAvailable()).toBe(false); // ohne Browser
+    const media = (coarse: boolean) => (q: string) => ({ matches: coarse && q === "(pointer: coarse)" });
+    vi.stubGlobal("window", { matchMedia: media(true) });
+    expect(cameraAvailable()).toBe(true); // Handy, Tablet
+    vi.stubGlobal("window", { matchMedia: media(false) });
+    expect(cameraAvailable()).toBe(false); // Maus: Desktop-Browser ignorieren „capture“
+    vi.stubGlobal("window", {});
+    expect(cameraAvailable()).toBe(false); // alter Browser ohne matchMedia
+    vi.unstubAllGlobals();
   });
 });

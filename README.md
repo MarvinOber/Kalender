@@ -13,12 +13,14 @@ von einer KI in strukturierte Einträge verwandelt, im Dialog bestätigt und dan
   reicht bis zum unteren Rand; gedrückt halten *oder* antippen/erneut tippen). Aufnahme im
   Browser → WAV 16 kHz mono → Backend → Transkription (OpenRouter) → Termin-Erkennung mit JSON-Schema
   (OpenRouter) → Bestätigungsdialog. Erst „Anlegen“ schreibt in Google. Daneben ein ⌨-Knopf zum Tippen.
-- **Foto**: Kamera-Knopf links neben dem Mikrofon. Das Gerät bietet Kamera oder Galerie an; fotografiert wird
+- **Foto**: Kamera-Knopf links neben dem Mikrofon. Auf Handy und Tablet fragt eine kleine Auswahl „Foto aufnehmen“
+  (öffnet direkt die Rückkamera) oder „Aus der Galerie“; am Computer öffnet der Knopf gleich die Dateien. Fotografiert wird
   z. B. eine Kalenderseite, ein Terminzettel vom Arzt oder ein (Eltern-)Brief. Der Browser verkleinert das Foto
   (längste Seite 2048 px, JPEG), das Bildmodell aus den Einstellungen liest eine kurze Abschrift und einen oder
   mehrere Termine ab (gleiches JSON-Schema wie bei der Sprache, plus Feld `text`). Der Bestätigungsdialog zeigt das
   Foto als Vorschau (Tippen vergrößert), die Abschrift („Vom Foto gelesen“, bearbeitbar und neu erkennbar) und je
-  Termin eine Karte; erst „Anlegen“ schreibt in Google, „Neues Foto“ öffnet wieder die Auswahl. Termine vor heute
+  Termin eine Karte; erst „Anlegen“ schreibt in Google, „Neues Foto“ nimmt wieder denselben Weg (Kamera oder
+  Galerie). Termine vor heute
   lässt das Modell weg; kommen trotzdem welche (z. B. falsches Jahr), sind sie markiert.
 - **Bearbeiten und Löschen**: Termin antippen → *Bearbeiten* (dieselbe Karte wie beim Anlegen) oder *Löschen*.
   Bei Serien wählbar: nur dieser Termin oder die ganze Serie. Geändert werden nur die Felder der Karte
@@ -150,7 +152,7 @@ npm test
 - `test_weather.py` – Open-Meteo-Abruf (Attrappe), Zwischenspeicher mit Rückfall auf den letzten Stand, Ort aus
   den Einstellungen.
 - `frontend/src/logic.test.ts` – Wochenrechnung, Filter, Überschneidungen, ganztägige Balken, Wettersymbole,
-  Maße beim Verkleinern der Fotos.
+  Maße beim Verkleinern der Fotos, Kamera-Auswahl nur auf Touch-Geräten.
 - `frontend/src/style.test.ts` – Stilwahl mit Rückfall auf *Klassisch*, Namen und Übersetzungen, und dass
   `styles.css` für jeden Stil alle Variablen setzt (sonst erben die Vorschaukacheln Farben des aktiven Stils).
 - `test_extraction_live.py` – dieselben Sätze gegen das echte Modell (nur auf Wunsch, kostet Cent-Beträge):
@@ -307,7 +309,8 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | Mikrofon-Knopf als Overlay (4 rem), Hinweistext nur während Aufnahme und Auswertung, „Stand“-Zeile klein unten links; *Termine* lässt unten Platz zum Hervorscrollen | Auftrag „Overlay, Kalender bis zum unteren Rand, Knopf etwas kleiner“; der Ruhe-Hinweis hätte Termine verdeckt und steht weiter als Tooltip am Knopf. |
 | Jede Änderung direkt nach `main` und sofort deployen | Auftrag „ohne Nachfragen“; Familien-App mit einem Entwickler, Fehler lassen sich mit dem nächsten Deployment schnell beheben. |
 | Deploy-Parameter aus dem laufenden Dienst statt im Repo | Repo ist öffentlich; E-Mail-Adressen und Client-ID gehören nicht hinein. |
-| Foto über die Auswahl des Geräts (`<input type="file" accept="image/*">` ohne `capture`) statt eigener Kameravorschau | Die Kamera-App fokussiert und belichtet Dokumente besser; ohne `capture` gehen auch Fotos aus der Galerie oder vom Messenger. |
+| Foto über die Kamera-App bzw. Bildauswahl des Geräts (`<input type="file" accept="image/*">`) statt eigener Kameravorschau | Die Kamera-App fokussiert und belichtet Dokumente besser; die Galerie bringt auch Fotos vom Messenger. |
+| Zwei Datei-Inputs: „Foto aufnehmen“ mit `capture="environment"`, „Aus der Galerie“ ohne; Auswahlmenü nur bei `(pointer: coarse)` | Auftrag „direkt ein neues Foto machen“: Viele Android-Geräte zeigen ohne `capture` nur die Galerie. Desktop-Browser ignorieren `capture`, dort wäre „Kamera“ irreführend – der Knopf öffnet gleich die Dateien. |
 | Foto im Browser auf 2048 px (JPEG 85 %) verkleinern, Server nimmt höchstens 10 MB | reicht für Handschrift auf einer Kalenderseite, spart Upload und Bild-Token; entfernt nebenbei die Metadaten (Aufnahmeort). |
 | Eigenes Modellfeld `photo_model`, Standard `xiaomi/mimo-v2.6-pro` | Auftrag „Modell in der Config hinterlegen“; laut OpenRouter-Modellliste mit Bild-Eingabe und JSON-Schema, wie die anderen beiden Standardmodelle. |
 | Foto-Antwort mit Abschrift `text` vor den Terminen; „Neu erkennen“ nach Bearbeiten geht über den Text-Weg | Die Familie sieht, was gelesen wurde, und kann Lesefehler im Text korrigieren, ohne neu zu fotografieren; derselbe Dialog wie bei der Sprache. |

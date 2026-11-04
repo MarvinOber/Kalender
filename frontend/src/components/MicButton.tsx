@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
+import { cameraAvailable, type PhotoSource } from "../photo";
 
 export type MicState = "idle" | "starting" | "recording" | "processing";
 
@@ -10,7 +11,8 @@ interface Props {
   onStart: () => void;
   onStop: () => void;
   onType: () => void;
-  onPhoto: () => void;
+  /** Muss den Datei-Input noch im Klick öffnen, sonst blockiert der Browser */
+  onPhoto: (source: PhotoSource) => void;
   /** Text während der Verarbeitung, Standard „Verstehe …“ */
   busyLabel?: string;
 }
@@ -19,12 +21,16 @@ const HOLD_MS = 400; // länger gedrückt = Sprechtaste, kürzer = Antippen star
 
 /**
  * Runder Knopf, schwebt unten in der Mitte über dem Kalender: gedrückt halten (loslassen beendet) oder antippen
- * (erneut tippen beendet). Links daneben der Foto-Knopf, rechts der Knopf zum Tippen.
+ * (erneut tippen beendet). Links daneben der Foto-Knopf (auf Handy und Tablet mit Auswahl Kamera oder Galerie),
+ * rechts der Knopf zum Tippen.
  */
 export function MicButton({ state, level, seconds, onStart, onStop, onType, onPhoto, busyLabel }: Props) {
   const mode = useRef<"none" | "pending" | "hold" | "tap">("none");
   const downAt = useRef(0);
   const stopWhenReady = useRef(false);
+  const [menu, setMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const photoBtn = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (state === "recording" && stopWhenReady.current) {
@@ -32,7 +38,37 @@ export function MicButton({ state, level, seconds, onStart, onStop, onType, onPh
       onStop();
     }
     if (state === "idle") mode.current = "none";
+    else setMenu(false);
   }, [state, onStop]);
+
+  // Auswahl schließt bei Tippen daneben oder Escape; der Foto-Knopf selbst schaltet sie per Klick um
+  useEffect(() => {
+    if (!menu) return;
+    const outside = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (!menuRef.current?.contains(target) && !photoBtn.current?.contains(target)) setMenu(false);
+    };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setMenu(false);
+      photoBtn.current?.focus();
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [menu]);
+
+  const photo = () => {
+    if (cameraAvailable()) setMenu((m) => !m);
+    else onPhoto("gallery");
+  };
+  const pick = (source: PhotoSource) => {
+    setMenu(false);
+    onPhoto(source);
+  };
 
   const down = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -97,9 +133,27 @@ export function MicButton({ state, level, seconds, onStart, onStop, onType, onPh
       </button>
       {state === "idle" && (
         <>
-          <button className="icon side-btn photo-btn" aria-label={t("Foto aufnehmen")} title={t("Foto aufnehmen")} onClick={onPhoto}>
+          <button
+            ref={photoBtn}
+            className="icon side-btn photo-btn"
+            aria-label={t("Foto")}
+            title={t("Foto")}
+            aria-haspopup={cameraAvailable() ? "menu" : undefined}
+            aria-expanded={cameraAvailable() ? menu : undefined}
+            onClick={photo}
+          >
             <CameraIcon />
           </button>
+          {menu && (
+            <div className="photo-menu" role="menu" ref={menuRef}>
+              <button role="menuitem" onClick={() => pick("camera")}>
+                <span aria-hidden>📷</span> {t("Foto aufnehmen")}
+              </button>
+              <button role="menuitem" onClick={() => pick("gallery")}>
+                <span aria-hidden>🖼️</span> {t("Aus der Galerie")}
+              </button>
+            </div>
+          )}
           <button className="icon side-btn type-btn" aria-label={t("Text eingeben")} title={t("Text eingeben")} onClick={onType}>
             ⌨
           </button>

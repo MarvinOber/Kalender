@@ -122,6 +122,7 @@ const EN: Record<string, string> = {
   "Diese Wiederholung lässt sich nur in Google Kalender ändern; sie bleibt unverändert.":
     "This repeat rule can only be changed in Google Calendar; it stays as it is.",
   "Foto aufnehmen": "Take a photo",
+  "Aus der Galerie": "From the gallery",
   "Lese das Foto …": "Reading the photo …",
   "Vom Foto gelesen": "Read from the photo",
   "Neues Foto": "New photo",
