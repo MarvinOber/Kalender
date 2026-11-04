@@ -60,6 +60,7 @@ export function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const recorder = useRef<Recorder | null>(null);
   const idleTimer = useRef<number>();
+  const calendarRef = useRef<HTMLElement>(null);
 
   // Jedes neue Ergebnis baut den Dialog frisch auf (eigene Bearbeitungen gelten nur für dieses Ergebnis).
   // Schließen verwirft auch das Foto; „Neu erkennen“ mit geändertem Text behält es.
@@ -187,6 +188,12 @@ export function App() {
     },
     [view, anchor, today],
   );
+
+  // Blättern per Wischen oder Pfeil; die neue Woche bzw. der neue Monat gleitet aus der Richtung herein
+  const go = (dir: number) => {
+    setAnchor((a) => step(view, a, dir));
+    slideIn(calendarRef.current, dir);
+  };
 
   // Bildschirm an der Wand wach halten (wo der Browser es kann)
   useEffect(() => {
@@ -358,10 +365,11 @@ export function App() {
         range={range}
         month={anchor.slice(0, 7)}
         isCurrent={isCurrent}
+        today={today}
         time={now.time}
         weather={weather}
-        onPrev={() => setAnchor(step(view, anchor, -1))}
-        onNext={() => setAnchor(step(view, anchor, 1))}
+        onPrev={() => go(-1)}
+        onNext={() => go(1)}
         onToday={() => setAnchor(today)}
         onView={changeView}
         onSettings={() => setSettingsOpen(true)}
@@ -376,9 +384,11 @@ export function App() {
         </div>
       )}
       <main
+        ref={calendarRef}
         className="calendar"
         onPointerDown={swipeStart}
-        onPointerUp={(e) => swipeEnd(e, (dir) => setAnchor(step(view, anchor, dir)))}
+        onPointerUp={(e) => swipeEnd(e, go)}
+        onPointerCancel={swipeCancel}
       >
         {view === "list" && (
           <AgendaView events={visible} start={range.start} days={range.days} today={today} nowMinutes={now.minutes} settings={settings} onSelect={setDetails} />
@@ -521,11 +531,16 @@ export function App() {
   );
 }
 
-// Wischen über den Kalender blättert Woche bzw. Monat
+// Wischen über den Kalender blättert Woche bzw. Monat (auf Touch-Handys ohne Pfeile der einzige Weg).
+// .calendar hat touch-action: pan-y – senkrecht scrollt der Browser, waagerecht bleibt die Geste hier.
 let swipe: { x: number; y: number; t: number } | null = null;
 
 function swipeStart(e: ReactPointerEvent) {
-  swipe = { x: e.clientX, y: e.clientY, t: Date.now() };
+  swipe = e.isPrimary ? { x: e.clientX, y: e.clientY, t: Date.now() } : null; // zwei Finger: kein Blättern
+}
+
+function swipeCancel() {
+  swipe = null;
 }
 
 function swipeEnd(e: ReactPointerEvent, go: (dir: number) => void) {
@@ -534,5 +549,16 @@ function swipeEnd(e: ReactPointerEvent, go: (dir: number) => void) {
   const dy = e.clientY - swipe.y;
   const fast = Date.now() - swipe.t < 600;
   swipe = null;
-  if (fast && Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(dy) * 1.5) go(dx < 0 ? 1 : -1);
+  if (fast && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) go(dx < 0 ? 1 : -1);
+}
+
+function slideIn(el: HTMLElement | null, dir: number) {
+  if (!el?.animate || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+  el.animate(
+    [
+      { transform: `translateX(${dir * 40}px)`, opacity: 0.35 },
+      { transform: "none", opacity: 1 },
+    ],
+    { duration: 220, easing: "ease-out" },
+  );
 }

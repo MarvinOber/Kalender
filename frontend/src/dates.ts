@@ -82,13 +82,20 @@ export function formatDay(iso: string, locale: string, opts: Intl.DateTimeFormat
   return new Intl.DateTimeFormat(locale, { timeZone: "UTC", ...opts }).format(utc(iso));
 }
 
-/** „2 – 8. November 2026“, „28. Dezember 2026 – 3. Januar 2027“ */
-export function rangeLabel(first: string, last: string, locale: string): string {
+/** „2 – 8. November 2026“, „28. Dezember 2026 – 3. Januar 2027“; kurz (Handy) „28. Dez. 2026 – 3. Jan. 2027“ */
+export function rangeLabel(first: string, last: string, locale: string, month: "long" | "short" = "long"): string {
   const opts: Intl.DateTimeFormatOptions =
     first.slice(0, 7) === last.slice(0, 7)
       ? { day: "numeric" }
       : first.slice(0, 4) === last.slice(0, 4)
-        ? { day: "numeric", month: "long" }
-        : { day: "numeric", month: "long", year: "numeric" };
-  return `${formatDay(first, locale, opts)} – ${formatDay(last, locale, { day: "numeric", month: "long", year: "numeric" })}`;
+        ? { day: "numeric", month }
+        : { day: "numeric", month, year: "numeric" };
+  return `${formatDay(first, locale, opts)} – ${formatDay(last, locale, { day: "numeric", month, year: "numeric" })}`;
+}
+
+/** Handy: kurze Monate, das laufende Jahr entfällt – „2 – 8. Nov.“, „30. Nov. – 6. Dez.“, „28. Dez. 2026 – 3. Jan. 2027“ */
+export function shortRangeLabel(first: string, last: string, locale: string, thisYear: string): string {
+  if (first.slice(0, 4) !== thisYear || last.slice(0, 4) !== thisYear) return rangeLabel(first, last, locale, "short");
+  const opts: Intl.DateTimeFormatOptions = first.slice(0, 7) === last.slice(0, 7) ? { day: "numeric" } : { day: "numeric", month: "short" };
+  return `${formatDay(first, locale, opts)} – ${formatDay(last, locale, { day: "numeric", month: "short" })}`;
 }

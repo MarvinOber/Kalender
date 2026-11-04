@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { cameraAvailable, type PhotoSource } from "../photo";
+import { useDismiss } from "./useDismiss";
 
 export type MicState = "idle" | "starting" | "recording" | "processing";
 
@@ -42,24 +43,7 @@ export function MicButton({ state, level, seconds, onStart, onStop, onType, onPh
   }, [state, onStop]);
 
   // Auswahl schließt bei Tippen daneben oder Escape; der Foto-Knopf selbst schaltet sie per Klick um
-  useEffect(() => {
-    if (!menu) return;
-    const outside = (e: PointerEvent) => {
-      const target = e.target as Node;
-      if (!menuRef.current?.contains(target) && !photoBtn.current?.contains(target)) setMenu(false);
-    };
-    const escape = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      setMenu(false);
-      photoBtn.current?.focus();
-    };
-    document.addEventListener("pointerdown", outside);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", outside);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [menu]);
+  useDismiss(menu, () => setMenu(false), [menuRef, photoBtn], photoBtn);
 
   const photo = () => {
     if (cameraAvailable()) setMenu((m) => !m);
@@ -145,7 +129,7 @@ export function MicButton({ state, level, seconds, onStart, onStop, onType, onPh
             <CameraIcon />
           </button>
           {menu && (
-            <div className="photo-menu" role="menu" ref={menuRef}>
+            <div className="menu photo-menu" role="menu" ref={menuRef}>
               <button role="menuitem" onClick={() => pick("camera")}>
                 <span aria-hidden>📷</span> {t("Foto aufnehmen")}
               </button>

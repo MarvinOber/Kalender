@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { httpErrorMessage } from "./api";
-import { addDays, addMonths, isoWeek, mondayOf, nowIn, rangeLabel } from "./dates";
+import { addDays, addMonths, isoWeek, mondayOf, nowIn, rangeLabel, shortRangeLabel } from "./dates";
 import { matches, pruneFilter } from "./filter";
 import { allDayBars, dayItems, timedSegments, visibleHours } from "./layout";
 import { cameraAvailable, fitWithin } from "./photo";
@@ -37,6 +37,11 @@ describe("Datum", () => {
     expect(rangeLabel("2026-11-02", "2026-11-08", "de-DE")).toBe("2 – 8. November 2026");
     expect(rangeLabel("2026-11-03", "2026-12-03", "de-DE")).toBe("3. November – 3. Dezember 2026");
     expect(rangeLabel("2026-12-28", "2027-01-03", "de-DE")).toBe("28. Dezember 2026 – 3. Januar 2027");
+    // Handy: kurze Monatsnamen, das laufende Jahr entfällt
+    expect(shortRangeLabel("2026-11-02", "2026-11-08", "de-DE", "2026")).toBe("2 – 8. Nov.");
+    expect(shortRangeLabel("2026-11-30", "2026-12-06", "de-DE", "2026")).toBe("30. Nov. – 6. Dez.");
+    expect(shortRangeLabel("2027-02-01", "2027-02-07", "de-DE", "2026")).toBe("1 – 7. Feb. 2027");
+    expect(shortRangeLabel("2026-12-28", "2027-01-03", "de-DE", "2026")).toBe("28. Dez. 2026 – 3. Jan. 2027");
   });
 
   it("nimmt die Familien-Zeitzone für jetzt", () => {

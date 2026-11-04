@@ -7,8 +7,13 @@ von einer KI in strukturierte Einträge verwandelt, im Dialog bestätigt und dan
   *Termine* – alle Termine der nächsten 31 Tage ab heute als Liste, ohne leere Tage, mehrtägige ganztägige einmal mit „bis …“; *Woche* – Zeitraster Mo–So ohne Scrollen, ganztägige Termine oben,
   Linie für die aktuelle Uhrzeit; *Monat* – volle Wochen Mo–So, je Tag so viele Termine wie hineinpassen,
   sonst „+n weitere“ (Tippen auf Tag oder „+n“ öffnet dessen Woche). Eigene Darstellung über die Calendar API,
-  Farben je Person. Pfeile und Wischen blättern Woche bzw. Monat, „Heute“ springt zurück. Aktualisierung alle
-  5 Minuten und beim Aufwachen des Geräts; nach 3 Minuten ohne Bedienung springt die Anzeige zurück zu heute.
+  Farben je Person. Pfeile und Wischen blättern Woche bzw. Monat (die neue Woche gleitet aus der Richtung herein),
+  „Heute“ springt zurück. Aktualisierung alle 5 Minuten und beim Aufwachen des Geräts; nach 3 Minuten ohne
+  Bedienung springt die Anzeige zurück zu heute.
+- **Handy** (bis 700 px breit oder bis 500 px hoch, also auch quer): der Kopf steht in einer Zeile – links KW und
+  Zeitraum mit kurzen Monatsnamen (das laufende Jahr entfällt), rechts Wetter, „Heute“ als Kalenderblatt mit dem
+  heutigen Tag, die Ansicht als Aufklappmenü (*Termine/Woche/Monat*) und Einstellungen. Uhr und Vollbild entfallen,
+  Filter-Chips und Stundenleiste sind schmaler. Auf Touch-Handys gibt es keine Pfeile: Wischen blättert.
 - **Spracheingabe**: runder Mikrofon-Knopf, der unten in der Mitte über dem Kalender schwebt (der Kalender
   reicht bis zum unteren Rand; gedrückt halten *oder* antippen/erneut tippen). Aufnahme im
   Browser → WAV 16 kHz mono → Backend → Transkription (OpenRouter) → Termin-Erkennung mit JSON-Schema
@@ -83,6 +88,8 @@ Browser (Tablet) ──HTTPS──▶ Cloud Run „kalender“ (ein Image)
 | `backend/app/settings.py` | Einstellungen der Familie (Firestore-Dokument `config/settings`) |
 | `frontend/src/` | React 18 + TypeScript + Vite |
 | `frontend/src/photo.ts` | Foto im Browser verkleinern (2048 px, JPEG, ohne Metadaten) |
+| `frontend/src/components/Header.tsx` | Kopf; Breitbild und Handy aus demselben Markup, umgeschaltet in `styles.css` („Handy“) |
+| `frontend/src/components/ViewMenu.tsx`, `useDismiss.ts` | Ansicht als Aufklappmenü (Handy); Menüs schließen bei Tippen daneben oder Escape |
 | `scripts/deploy.ps1` | Einrichtung und Deployment (idempotent) |
 
 **Tags im Google-Termin:** maschinenlesbar in `extendedProperties.private` (`fkPersons=lena,max`,
@@ -155,7 +162,7 @@ npm test
 - `test_auth.py` – Token-Erneuerung, abgelaufenes Token → neue Anmeldung, Pflichtangaben im Cloud-Betrieb.
 - `test_weather.py` – Open-Meteo-Abruf (Attrappe), Zwischenspeicher mit Rückfall auf den letzten Stand, Ort aus
   den Einstellungen.
-- `frontend/src/logic.test.ts` – Wochenrechnung, Filter, Überschneidungen, ganztägige Balken, Wettersymbole,
+- `frontend/src/logic.test.ts` – Wochenrechnung, Zeitraum-Titel (auch kurz fürs Handy), Filter, Überschneidungen, ganztägige Balken, Wettersymbole,
   Maße beim Verkleinern der Fotos, Kamera-Auswahl nur auf Touch-Geräten, Meldungen bei Antworten ohne JSON.
 - `frontend/src/style.test.ts` – Stilwahl mit Rückfall auf *Klassisch*, Namen und Übersetzungen, und dass
   `styles.css` für jeden Stil alle Variablen setzt (sonst erben die Vorschaukacheln Farben des aktiven Stils).
@@ -313,6 +320,10 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | *Termine* zeigt die nächsten 31 Tage ab heute, unabhängig von der zuvor gewählten Woche oder dem Monat; Pfeile blättern 31 Tage, um Mitternacht rückt die Liste mit | Auftrag „alle Termine in den nächsten 31 Tagen“; die API liefert bis 42 Tage am Stück. |
 | Monat: Termine je Tag als Zeile, mehrtägige an jedem Tag einzeln; Tippen auf den Tag öffnet die Woche | lesbar in schmalen Zellen ohne Balkenlogik über Zellgrenzen; Details stehen in der Wochenansicht. |
 | Mikrofon-Knopf als Overlay (4 rem), Hinweistext nur während Aufnahme und Auswertung, „Stand“-Zeile klein unten links; *Termine* lässt unten Platz zum Hervorscrollen | Auftrag „Overlay, Kalender bis zum unteren Rand, Knopf etwas kleiner“; der Ruhe-Hinweis hätte Termine verdeckt und steht weiter als Tooltip am Knopf. |
+| Handy-Kopf per CSS (`@media (max-width: 700px), (max-height: 500px)`) aus demselben Markup wie am Wand-Tablet, nicht per JavaScript | Keine zweite Kopf-Komponente und kein Umschalten beim Drehen; Wand-Tablet und Desktop bleiben unverändert. Querformat zählt mit, weil dort die Höhe knapp ist. |
+| Pfeile entfallen nur bei `(pointer: coarse)` im Handy-Format; mit Maus bleiben sie (vor dem Titel), dafür weicht unter 440 px das Wetter | Auftrag „Pfeile auf mobilen Geräten mit Touchscreen entfernen, Wechsel durch Wischen“; mit Maus wäre Wischen nicht auffindbar. |
+| Auf dem Handy ohne Uhr und Vollbild-Knopf, „Heute“ als Kalenderblatt mit Tageszahl, Jahr nur außerhalb des laufenden Jahres | Auftrag „keinen Platz im Header verschwenden“: Uhrzeit zeigt das Handy selbst, Vollbild ist für die Wand; so passen Titel und Knöpfe ab 375 px in eine Zeile. |
+| Wischen über Pointer-Events mit `touch-action: pan-y` am Kalender (ab 60 px waagerecht, unter 0,6 s), kurzes Hereingleiten per Web Animations API, nicht bei `prefers-reduced-motion` | Senkrechtes Scrollen (Termine-Liste) bleibt beim Browser; kein Gesten-Paket nötig. |
 | Jede Änderung direkt nach `main` und sofort deployen | Auftrag „ohne Nachfragen“; Familien-App mit einem Entwickler, Fehler lassen sich mit dem nächsten Deployment schnell beheben. |
 | Deploy-Parameter aus dem laufenden Dienst statt im Repo | Repo ist öffentlich; E-Mail-Adressen und Client-ID gehören nicht hinein. |
 | Foto über die Kamera-App bzw. Bildauswahl des Geräts (`<input type="file" accept="image/*">`) statt eigener Kameravorschau | Die Kamera-App fokussiert und belichtet Dokumente besser; die Galerie bringt auch Fotos vom Messenger. |

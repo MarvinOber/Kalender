@@ -68,6 +68,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   display: flex;
   flex-direction: column;
   height: 100dvh;
+  overflow-x: clip; /* Hereingleiten beim Blättern erzeugt keinen Rollbalken */
   padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   gap: 6px;
 }
@@ -87,6 +88,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .header .range { font-size: 1.45rem; font-weight: 700; }
 .header .clock { font-size: 1.9rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-right: 8px; }
 .header .weather { display: inline-flex; align-items: center; gap: 4px; font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+/* Nur auf dem Handy (siehe „Handy“ am Ende): Ansicht als Aufklappmenü, „Heute“ als Kalenderblatt, kurze Monate */
+.header .view-menu-wrap, .header .today-day, .header .range.short { display: none; }
+.view-menu-wrap { position: relative; }
+.view-btn { padding: 0 0.6rem 0 0.95rem; gap: 2px; }
+.view-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 25; min-width: 10rem; }
+.view-menu .check { width: 1.1rem; color: var(--accent); font-weight: 800; }
+.view-menu button.on { color: var(--accent); }
 
 .btn {
   display: inline-flex;
@@ -396,11 +404,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .side-btn { position: absolute; bottom: 0.7rem; opacity: 0.9; box-shadow: var(--shadow); }
 .type-btn { left: calc(100% + 12px); }
 .photo-btn { right: calc(100% + 12px); }
-/* Auswahl Kamera/Galerie über dem Foto-Knopf; ragt nach rechts über das Mikrofon, damit sie im Bild bleibt */
-.photo-menu {
-  position: absolute;
-  bottom: calc(0.7rem + 2.6rem + 8px);
-  left: calc(-12px - 2.6rem);
+/* Aufklappmenüs (Foto, Ansicht auf dem Handy) */
+.menu {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -410,7 +415,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border-radius: 14px;
   box-shadow: var(--shadow);
 }
-.photo-menu button {
+.menu button {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -426,7 +431,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
   white-space: nowrap;
   cursor: pointer;
 }
-.photo-menu button:is(:hover, :focus-visible) { background: var(--bg); }
+.menu button:is(:hover, :focus-visible) { background: var(--bg); }
+/* Auswahl Kamera/Galerie über dem Foto-Knopf; ragt nach rechts über das Mikrofon, damit sie im Bild bleibt */
+.photo-menu { position: absolute; bottom: calc(0.7rem + 2.6rem + 8px); left: calc(-12px - 2.6rem); }
 .photo-menu span { font-size: 1.3rem; }
 .confirm .sheet-body > .btn { align-self: flex-start; }
 /* Foto im Bestätigungsdialog: klein als Vorschau, Tippen vergrößert */
@@ -883,21 +890,64 @@ input[type="color"] { width: 2.6rem; height: 2.6rem; border: none; padding: 0; b
 /* ---------- Kleine Bildschirme ---------- */
 
 @media (max-width: 700px) {
-  .header { flex-wrap: wrap; }
-  .header .title { order: 3; width: 100%; }
-  .header .nav { flex-wrap: wrap; }
-  .header .views { margin-left: 0; }
   .day-head { flex-direction: column; align-items: center; gap: 0; }
   .day-head .wd { font-size: 0.75rem; }
   .day-head .dn { font-size: 1.2rem; }
   .month-head .wd { font-size: 0.75rem; }
   .month-ev .ev-time { display: none; }
-  .header .range { font-size: 1.15rem; }
-  .header .clock { font-size: 1.4rem; }
-  .header .weather { font-size: 1.1rem; }
   .agenda-ev { grid-template-columns: 1fr; }
   .agenda-ev .ev-meta { grid-column: 1; }
   .row.item { flex-wrap: wrap; }
   .sheet-foot .btn { flex: 1 1 auto; }
   .styles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---------- Handy (hoch und quer): Kopf in einer Zeile, der Kalender bekommt den Platz ---------- */
+
+/* Titel links, rechts Wetter, „Heute“, Ansicht, Einstellungen. Uhr und Vollbild entfallen (zeigt das Handy selbst).
+   .nav und .tools lösen sich auf, damit ihre Knöpfe per order frei in der Zeile stehen. */
+@media (max-width: 700px), (max-height: 500px) {
+  .app {
+    gap: 4px;
+    padding: max(6px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  }
+  .header { flex-wrap: nowrap; gap: 4px; min-height: 0; }
+  .header .title { margin-right: 2px; }
+  .header .nav, .header .tools { display: contents; }
+  .header .views, .header .clock, .header .fullscreen-btn, .header .today-text, .header .range.long { display: none; }
+  .header .arrow { order: 1; }
+  .header .title { order: 2; flex: 1 1 auto; min-width: 0; align-items: flex-start; text-align: left; line-height: 1.2; }
+  .header .weather { order: 4; font-size: 1rem; gap: 2px; }
+  .header .today-btn { order: 5; }
+  .header .view-menu-wrap { order: 6; display: block; }
+  .header .settings-btn { order: 7; }
+  .header .week-no { font-size: 0.7rem; }
+  .header .range { font-size: 1.05rem; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .header .range.short { display: block; }
+  .header :is(.btn, .icon) { min-height: 2.4rem; height: 2.4rem; flex: none; }
+  .header .view-btn { padding: 0 0.4rem 0 0.75rem; font-size: 0.95rem; }
+  .header .icon { width: 2.4rem; font-size: 1.15rem; }
+  .header .icon.big { font-size: 1.6rem; }
+  /* Kalenderblatt mit dem heutigen Tag – kräftig, solange ein anderer Zeitraum zu sehen ist */
+  .header .today-btn { width: 2.4rem; padding: 0; border-radius: 9px; border-top: 5px solid var(--today-mark); }
+  .header .today-btn.primary { border-color: var(--accent); }
+  .header .today-day { display: inline; font-size: 1rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+  .filterbar { gap: 6px; padding: 0 0 2px; }
+  .filterbar .chip { min-height: 2.1rem; padding: 0 0.75rem; font-size: 0.9rem; }
+
+  .week-head, .allday, .grid { grid-template-columns: 1.9rem repeat(7, minmax(0, 1fr)); }
+  .allday .gutter.label { display: none; } /* das Band unter den Tagen erklärt sich selbst */
+  .allday { min-height: 1.4rem; }
+  .grid .hour { right: 4px; font-size: 0.72rem; }
+  .day-head { padding: 2px 0 4px; }
+}
+
+/* Touch-Handy: Wischen blättert, die Pfeile entfallen */
+@media (pointer: coarse) and (max-width: 700px), (pointer: coarse) and (max-height: 500px) {
+  .header .arrow { display: none; }
+}
+/* Schmales Fenster mit Maus: die Pfeile bleiben, dafür weicht das Wetter dem Titel */
+@media (hover: hover) and (max-width: 440px) {
+  .header .weather { display: none; }
 }
