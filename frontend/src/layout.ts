@@ -127,6 +127,104 @@ export function dayItems(events: CalEvent[], start: string, days: number): DayIt
   return result.map((list) => list.sort((a, b) => a.sort.localeCompare(b.sort)).map((x) => x.item));
 }
 
+export interface MonthBar {
+  event: CalEvent;
+  allDay: boolean;
+  startCol: number; // 0 = Montag der Woche
+  span: number;
+  lane: number; // Zeile unter der Tageszahl
+  continuesBefore: boolean; // beginnt vor dieser Woche
+  continuesAfter: boolean; // endet nach dieser Woche
+}
+
+export interface MonthWeek {
+  bars: MonthBar[]; // mehrtägige Termine als ein Balken
+  singles: DayItem[][]; // je Wochentag die eintägigen Termine
+}
+
+/** Monatsübersicht: je Woche mehrtägige Termine als Balken (ohne Überlappung in Bahnen), eintägige je Tag. */
+export function monthWeeks(events: CalEvent[], start: string, weeks: number): MonthWeek[] {
+  const days = dayItems(events, start, weeks * 7);
+  return Array.from({ length: weeks }, (_, w) => {
+    const week = days.slice(w * 7, w * 7 + 7);
+    const bars = new Map<string, MonthBar>();
+    const singles = week.map((list, col) =>
+      list.filter((item) => {
+        if (!item.continuesBefore && !item.continuesAfter) return true;
+        const bar = bars.get(item.event.id);
+        if (bar) {
+          bar.span = col - bar.startCol + 1;
+          bar.continuesAfter = item.continuesAfter && col === 6;
+        } else {
+          bars.set(item.event.id, {
+            event: item.event,
+            allDay: item.allDay,
+            startCol: col,
+            span: 1,
+            lane: 0,
+            continuesBefore: item.continuesBefore,
+            continuesAfter: item.continuesAfter && col === 6,
+          });
+        }
+        return false;
+      }),
+    );
+    const sorted = [...bars.values()].sort(
+      (a, b) =>
+        a.startCol - b.startCol ||
+        b.span - a.span ||
+        Number(b.allDay) - Number(a.allDay) ||
+        a.event.start.localeCompare(b.event.start),
+    );
+    const lanes: number[] = []; // letzte belegte Spalte je Bahn
+    for (const bar of sorted) {
+      let lane = lanes.findIndex((end) => end < bar.startCol);
+      if (lane < 0) lane = lanes.push(-1) - 1;
+      lanes[lane] = bar.startCol + bar.span - 1;
+      bar.lane = lane;
+    }
+    return { bars: sorted, singles };
+  });
+}
+
+export interface FittedWeek {
+  bars: MonthBar[]; // sichtbare Balken
+  cells: { reserved: number; shown: DayItem[]; more: number }[]; // reserved = Bahnen für Balken
+}
+
+/** Was in eine Woche passt: `slots` Zeilen je Tag, `slotsWithMore` wenn noch „+n weitere“ hineinmuss. */
+export function fitWeek(week: MonthWeek, slots: number, slotsWithMore: number): FittedWeek {
+  const covers = (bar: MonthBar, col: number) => col >= bar.startCol && col < bar.startCol + bar.span;
+  const cap = Array.from({ length: 7 }, (_, col) => {
+    const lanes = Math.max(0, ...week.bars.filter((b) => covers(b, col)).map((b) => b.lane + 1));
+    return lanes + week.singles[col].length <= slots ? slots : slotsWithMore;
+  });
+  let visible = week.bars;
+  for (;;) {
+    visible = week.bars.filter((b) => cap.slice(b.startCol, b.startCol + b.span).every((c) => b.lane < c));
+    // Ein ausgeblendeter Balken braucht an jedem seiner Tage die Zeile „+n weitere“
+    let changed = false;
+    for (const b of week.bars) {
+      if (visible.includes(b)) continue;
+      for (let col = b.startCol; col < b.startCol + b.span; col++) {
+        if (cap[col] !== slotsWithMore) {
+          cap[col] = slotsWithMore;
+          changed = true;
+        }
+      }
+    }
+    if (!changed) break;
+  }
+  const cells = week.singles.map((singles, col) => {
+    const here = week.bars.filter((b) => covers(b, col));
+    const reserved = Math.max(0, ...visible.filter((b) => covers(b, col)).map((b) => b.lane + 1));
+    const shown = singles.slice(0, Math.max(0, cap[col] - reserved));
+    const hiddenBars = here.filter((b) => !visible.includes(b)).length;
+    return { reserved, shown, more: hiddenBars + singles.length - shown.length };
+  });
+  return { bars: visible, cells };
+}
+
 /** Sichtbarer Stundenbereich: mindestens 7–21 Uhr, erweitert um frühere oder spätere Termine. */
 export function visibleHours(days: Segment[][], from = 7, to = 21): [number, number] {
   let first = from;

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { httpErrorMessage } from "./api";
 import { addDays, addMonths, isoWeek, mondayOf, nowIn, rangeLabel, shortRangeLabel } from "./dates";
 import { matches, pruneFilter } from "./filter";
-import { allDayBars, dayItems, timedSegments, visibleHours } from "./layout";
+import { allDayBars, dayItems, fitWeek, monthWeeks, timedSegments, visibleHours } from "./layout";
 import { cameraAvailable, fitWithin } from "./photo";
 import type { CalEvent } from "./types";
 import { inRange, rangeOf, samePeriod, step } from "./view";
@@ -175,6 +175,56 @@ describe("Ansicht", () => {
     expect(days.flat().some((x) => x.event.id === "vorher")).toBe(false);
     expect(days[9].find((x) => x.event.id === "nacht")?.continuesAfter).toBe(false);
     expect(days[8][0]).toMatchObject({ continuesBefore: true, continuesAfter: true });
+  });
+
+  it("zeigt mehrtägige Termine im Monat als einen Balken je Woche", () => {
+    const weeks = monthWeeks(
+      [
+        ev({ id: "urlaub", all_day: true, start: "2026-11-05", end: "2026-11-12" }), // Do bis Mi
+        ev({ id: "messe", start: "2026-11-03T09:00", end: "2026-11-06T17:00" }), // Di bis Fr
+        ev({ id: "arzt", start: "2026-11-05T10:00", end: "2026-11-05T11:00" }),
+        ev({ id: "nacht", start: "2026-11-04T22:00", end: "2026-11-05T00:00" }),
+      ],
+      "2026-11-02",
+      2,
+    );
+    const [w1, w2] = weeks;
+    expect(w1.bars.map((b) => [b.event.id, b.startCol, b.span, b.lane])).toEqual([
+      ["messe", 1, 4, 0],
+      ["urlaub", 3, 4, 1],
+    ]);
+    expect(w1.bars[1]).toMatchObject({ continuesBefore: false, continuesAfter: true });
+    expect(w2.bars.map((b) => [b.event.id, b.startCol, b.span, b.lane])).toEqual([["urlaub", 0, 3, 0]]);
+    expect(w2.bars[0]).toMatchObject({ continuesBefore: true, continuesAfter: false });
+    expect(w1.singles[3].map((x) => x.event.id)).toEqual(["arzt"]);
+    expect(w1.singles[2].map((x) => x.event.id)).toEqual(["nacht"]); // endet um Mitternacht: eintägig
+  });
+
+  it("blendet im Monat aus, was nicht passt, und zählt es als „weitere“", () => {
+    const [week] = monthWeeks(
+      [
+        ev({ id: "a", all_day: true, start: "2026-11-02", end: "2026-11-05" }), // Mo–Mi, Bahn 0
+        ev({ id: "b", all_day: true, start: "2026-11-03", end: "2026-11-05" }), // Di–Mi, Bahn 1
+        ev({ id: "x", start: "2026-11-02T09:00", end: "2026-11-02T10:00" }),
+        ev({ id: "y", start: "2026-11-03T09:00", end: "2026-11-03T10:00" }),
+      ],
+      "2026-11-02",
+      1,
+    );
+    const roomy = fitWeek(week, 4, 3);
+    expect(roomy.bars).toHaveLength(2);
+    expect(roomy.cells.slice(0, 3).map((c) => [c.reserved, c.shown.length, c.more])).toEqual([
+      [1, 1, 0],
+      [2, 1, 0],
+      [2, 0, 0],
+    ]);
+    const tight = fitWeek(week, 2, 1);
+    expect(tight.bars.map((b) => b.event.id)).toEqual(["a"]);
+    expect(tight.cells.slice(0, 3).map((c) => [c.reserved, c.shown.length, c.more])).toEqual([
+      [1, 1, 0], // Montag: Balken und ein Termin passen genau
+      [1, 0, 2],
+      [1, 0, 1],
+    ]);
   });
 });
 

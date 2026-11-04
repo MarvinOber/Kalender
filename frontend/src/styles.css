@@ -314,7 +314,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .month { height: 100%; display: flex; flex-direction: column; }
 .month-head { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-bottom: 2px solid var(--line-strong); }
 .month-head .wd { text-align: center; padding: 4px 0 6px; font-size: 1.05rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
-.month-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.month-body { flex: 1; min-height: 0; position: relative; }
+.month-grid { height: 100%; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+/* Mehrtägige Termine: eigene Ebene über dem Raster, je Woche ein Balken über alle Tage; die Zellen halten Platz frei */
+.month-bars { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); pointer-events: none; }
+.month-lanes { flex: none; }
+.ev.month-bar { pointer-events: auto; align-self: start; min-width: 0; margin-inline: 3px; z-index: 1; }
+.ev.month-bar.cont-left::before { display: none; }
+.ev.month-bar.cont-left { margin-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.ev.month-bar.cont-right { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .month-cell {
   min-height: 0;
   overflow: hidden;

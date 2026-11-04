@@ -5,8 +5,8 @@ von einer KI in strukturierte Einträge verwandelt, im Dialog bestätigt und dan
 
 - **Drei Ansichten**, umschaltbar im Kopf, Standard *Woche* (die Wahl bleibt im Gerät gespeichert):
   *Termine* – alle Termine der nächsten 31 Tage ab heute als Liste, ohne leere Tage, mehrtägige ganztägige einmal mit „bis …“; *Woche* – Zeitraster Mo–So ohne Scrollen, ganztägige Termine oben,
-  Linie für die aktuelle Uhrzeit; *Monat* – volle Wochen Mo–So, je Tag so viele Termine wie hineinpassen,
-  sonst „+n weitere“ (Tippen auf Tag oder „+n“ öffnet dessen Woche). Eigene Darstellung über die Calendar API,
+  Linie für die aktuelle Uhrzeit; *Monat* – volle Wochen Mo–So, mehrtägige Termine als ein durchgehender Balken (an Wochengrenzen
+  umbrochen), je Tag so viele Termine wie hineinpassen, sonst „+n weitere“ (Tippen auf Tag oder „+n“ öffnet dessen Woche). Eigene Darstellung über die Calendar API,
   Farben je Person. Pfeile und Wischen blättern Woche bzw. Monat (die neue Woche gleitet aus der Richtung herein),
   „Heute“ springt zurück. Aktualisierung alle 5 Minuten und beim Aufwachen des Geräts; nach 3 Minuten ohne
   Bedienung springt die Anzeige zurück zu heute.
@@ -162,7 +162,7 @@ npm test
 - `test_auth.py` – Token-Erneuerung, abgelaufenes Token → neue Anmeldung, Pflichtangaben im Cloud-Betrieb.
 - `test_weather.py` – Open-Meteo-Abruf (Attrappe), Zwischenspeicher mit Rückfall auf den letzten Stand, Ort aus
   den Einstellungen.
-- `frontend/src/logic.test.ts` – Wochenrechnung, Zeitraum-Titel (auch kurz fürs Handy), Filter, Überschneidungen, ganztägige Balken, Wettersymbole,
+- `frontend/src/logic.test.ts` – Wochenrechnung, Zeitraum-Titel (auch kurz fürs Handy), Filter, Überschneidungen, ganztägige Balken, Monatsbalken und „+n weitere“, Wettersymbole,
   Maße beim Verkleinern der Fotos, Kamera-Auswahl nur auf Touch-Geräten, Meldungen bei Antworten ohne JSON.
 - `frontend/src/style.test.ts` – Stilwahl mit Rückfall auf *Klassisch*, Namen und Übersetzungen, und dass
   `styles.css` für jeden Stil alle Variablen setzt (sonst erben die Vorschaukacheln Farben des aktiven Stils).
@@ -318,7 +318,7 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | Stil je Gerät in `localStorage`, nicht in `config/settings` | Wie die Ansicht eine Frage der Anzeige: Wand-Tablet und Handy dürfen verschieden aussehen; kein Backend nötig. Sechs Stile: die drei aus dem Auftrag („Modern, Minimalistisch, Kunterbunt, …“) plus *Papier* und *Nacht*; der bisherige Look bleibt als *Klassisch* Standard. |
 | Stile nur über CSS-Variablen und `:root[data-style=…]`, Systemschriften statt Webfonts | Keine zusätzlichen Anfragen und Abhängigkeiten; die Stile unterscheiden sich über Farben, Formen und Schriftstärken. *Klassisch*, *Modern* und *Minimalistisch* folgen dem Dunkelmodus des Geräts, *Kunterbunt* und *Papier* bleiben hell, *Nacht* ist immer dunkel. |
 | *Termine* zeigt die nächsten 31 Tage ab heute, unabhängig von der zuvor gewählten Woche oder dem Monat; Pfeile blättern 31 Tage, um Mitternacht rückt die Liste mit | Auftrag „alle Termine in den nächsten 31 Tagen“; die API liefert bis 42 Tage am Stück. |
-| Monat: Termine je Tag als Zeile, mehrtägige an jedem Tag einzeln; Tippen auf den Tag öffnet die Woche | lesbar in schmalen Zellen ohne Balkenlogik über Zellgrenzen; Details stehen in der Wochenansicht. |
+| Monat: mehrtägige Termine (ganztägig oder über Mitternacht hinaus) als ein Balken je Woche in festen Bahnen oben, eintägige darunter je Tag; was nicht passt, zählt als „+n weitere“. Tippen auf den Tag öffnet die Woche | Wunsch der Familie: ein Urlaub soll als ein Balken erkennbar sein statt als Kette abgeschnittener Kästchen; eigene Ebene über dem Raster, damit die Tageszellen unverändert bleiben. |
 | Mikrofon-Knopf als Overlay (4 rem), Hinweistext nur während Aufnahme und Auswertung, „Stand“-Zeile klein unten links; *Termine* lässt unten Platz zum Hervorscrollen | Auftrag „Overlay, Kalender bis zum unteren Rand, Knopf etwas kleiner“; der Ruhe-Hinweis hätte Termine verdeckt und steht weiter als Tooltip am Knopf. |
 | Handy-Kopf per CSS (`@media (max-width: 700px), (max-height: 500px)`) aus demselben Markup wie am Wand-Tablet, nicht per JavaScript | Keine zweite Kopf-Komponente und kein Umschalten beim Drehen; Wand-Tablet und Desktop bleiben unverändert. Querformat zählt mit, weil dort die Höhe knapp ist. |
 | Pfeile entfallen nur bei `(pointer: coarse)` im Handy-Format; mit Maus bleiben sie (vor dem Titel), dafür weicht unter 440 px das Wetter | Auftrag „Pfeile auf mobilen Geräten mit Touchscreen entfernen, Wechsel durch Wischen“; mit Maus wäre Wischen nicht auffindbar. |
