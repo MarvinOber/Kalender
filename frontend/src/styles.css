@@ -59,7 +59,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   display: flex;
   flex-direction: column;
   height: 100dvh;
-  padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+  padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   gap: 6px;
 }
 
@@ -165,12 +165,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .calendar { flex: 1; min-height: 0; position: relative; touch-action: pan-y; }
 
+/* Stand-Zeile liegt wie der Mikrofon-Knopf über dem Kalender, der bis zum unteren Rand reicht */
 .footer {
-  height: calc(5.6rem + env(safe-area-inset-bottom)); /* Platz für den Mikrofon-Knopf */
-  display: flex;
-  align-items: flex-end;
-  padding-bottom: calc(6px + env(safe-area-inset-bottom));
-  font-size: 0.75rem;
+  position: fixed;
+  left: max(12px, env(safe-area-inset-left));
+  bottom: max(2px, env(safe-area-inset-bottom));
+  z-index: 10;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  font-size: 0.7rem;
   color: var(--muted);
   pointer-events: none;
 }
@@ -270,7 +274,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .allday-ev .ev-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
 /* Hochformat: Tagesliste */
-.agenda { height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 8px; }
+.agenda { height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 5rem; /* letzte Termine unter dem Mikrofon-Knopf hervorscrollen */ }
 .agenda-day { background: var(--panel); border-radius: var(--radius); padding: 10px 12px; border: 1px solid var(--line); }
 .agenda-day.today { background: var(--today); border-color: var(--warn); }
 .agenda-day.past { opacity: 0.65; }
@@ -341,14 +345,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .mic-wrap {
   position: fixed;
   left: 50%;
-  bottom: calc(10px + env(safe-area-inset-bottom));
+  bottom: calc(12px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
   z-index: 20;
+  pointer-events: none; /* nur die Knöpfe fangen Klicks, der Kalender darunter bleibt bedienbar */
 }
+.mic-wrap > * { pointer-events: auto; }
 .mic-label {
   font-size: 0.8rem;
   font-weight: 600;
@@ -360,8 +366,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .mic {
   --level: 0;
-  width: 5.2rem;
-  height: 5.2rem;
+  width: 4rem;
+  height: 4rem;
   border-radius: 50%;
   border: none;
   background: var(--accent);
@@ -377,7 +383,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   transition: transform 0.15s, background 0.15s;
 }
 .mic:active { transform: scale(0.96); }
-.type-btn { position: absolute; left: calc(100% + 14px); bottom: 1.3rem; opacity: 0.8; }
+.type-btn { position: absolute; left: calc(100% + 12px); bottom: 0.7rem; opacity: 0.9; box-shadow: var(--shadow); }
 .confirm .sheet-body > .btn { align-self: flex-start; }
 .recording .mic, .starting .mic {
   background: var(--now);
@@ -388,8 +394,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .processing .mic { background: var(--muted); }
 @keyframes pulse { 50% { transform: scale(1.05); } }
 .spinner {
-  width: 2.2rem;
-  height: 2.2rem;
+  width: 1.7rem;
+  height: 1.7rem;
   border: 4px solid rgba(255, 255, 255, 0.4);
   border-top-color: #fff;
   border-radius: 50%;
@@ -491,7 +497,7 @@ input[type="color"] { width: 2.6rem; height: 2.6rem; border: none; padding: 0; b
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(8.5rem + env(safe-area-inset-bottom));
+  bottom: calc(7rem + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   z-index: 40;
   display: flex;

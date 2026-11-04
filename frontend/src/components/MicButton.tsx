@@ -14,7 +14,7 @@ interface Props {
 
 const HOLD_MS = 400; // länger gedrückt = Sprechtaste, kürzer = Antippen startet und stoppt
 
-/** Großer Knopf unten in der Mitte: gedrückt halten (loslassen beendet) oder antippen (erneut tippen beendet). */
+/** Runder Knopf, schwebt unten in der Mitte über dem Kalender: gedrückt halten (loslassen beendet) oder antippen (erneut tippen beendet). */
 export function MicButton({ state, level, seconds, onStart, onStop, onType }: Props) {
   const mode = useRef<"none" | "pending" | "hold" | "tap">("none");
   const downAt = useRef(0);
@@ -70,12 +70,14 @@ export function MicButton({ state, level, seconds, onStart, onStop, onType }: Pr
 
   return (
     <div className={`mic-wrap ${state}`}>
-      <div className="mic-label" aria-live="polite">
+      {/* Im Ruhezustand kein Hinweistext, damit das Overlay möglichst wenig vom Kalender verdeckt */}
+      <div className="mic-label" aria-live="polite" hidden={state === "idle"}>
         {label}
       </div>
       <button
         className="mic"
         aria-label={label}
+        title={label}
         aria-pressed={recording}
         disabled={state === "processing"}
         onPointerDown={down}
@@ -102,7 +104,7 @@ function fmt(s: number): string {
 
 function MicIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="44" height="44" aria-hidden>
+    <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden>
       <rect x="8.5" y="2.5" width="7" height="12" rx="3.5" fill="currentColor" />
       <path d="M5 11a7 7 0 0 0 14 0M12 18v3.5M8.5 21.5h7" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
     </svg>
