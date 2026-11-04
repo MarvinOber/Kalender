@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import wave
@@ -10,6 +11,7 @@ import httpx
 
 from app import main
 from app.calendar_api import GoogleCalendar
+from app.errors import ModelTimeout
 from app.fake_llm import DEMO_SENTENCE
 from app.openrouter import ModelUnavailable
 
@@ -109,6 +111,45 @@ def test_modell_nicht_erreichbar(client):
     assert resp.status_code == 502
     assert resp.json() == {"code": "model_unavailable",
                            "message": "Das Modell xiaomi/mimo-v2.6-pro ist nicht erreichbar (Fehler 503)."}
+
+
+def test_modellaufrufe_blockieren_den_server_nicht(client):
+    # Lief das Modell im Event-Loop, hingen während eines langsamen Fotos alle Anfragen (504 nach 120 s).
+    in_loop: list[bool] = []
+
+    def loop_running() -> bool:
+        try:
+            asyncio.get_running_loop()
+            return True
+        except RuntimeError:
+            return False
+
+    class Watch(ScriptedLlm):
+        def transcribe(self, *args):
+            in_loop.append(loop_running())
+            return super().transcribe(*args)
+
+        def complete_json(self, *args):
+            in_loop.append(loop_running())
+            return super().complete_json(*args)
+
+    main.app.dependency_overrides[main.llm_dep] = lambda: Watch(transcript="Morgen um 8 Arzt")
+    assert client.post("/api/voice", files={"audio": ("a.wav", wav_bytes(), "audio/wav")}).status_code == 200
+    assert client.post("/api/photo", files={"image": ("f.jpg", JPEG, "image/jpeg")}).status_code == 200
+    assert client.post("/api/parse", json={"text": "Morgen um 8 Arzt"}).status_code == 200
+    assert in_loop == [False, False, False, False]
+
+
+def test_modell_zu_langsam(client):
+    class Slow(ScriptedLlm):
+        def complete_json(self, model, *args):
+            raise ModelTimeout(f"Das Modell {model} hat nicht rechtzeitig geantwortet (Abbruch nach 90 Sekunden).")
+
+    main.app.dependency_overrides[main.llm_dep] = lambda: Slow()
+    resp = client.post("/api/photo", files={"image": ("f.jpg", JPEG, "image/jpeg")})
+    assert resp.status_code == 504
+    assert resp.json() == {"code": "model_timeout", "message": "Das Modell xiaomi/mimo-v2.6-pro hat nicht "
+                                                                "rechtzeitig geantwortet (Abbruch nach 90 Sekunden)."}
 
 
 def test_anlegen_prueft_alle_vorher(client):

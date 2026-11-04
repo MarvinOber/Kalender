@@ -11,6 +11,7 @@ from fastapi import Depends, FastAPI, File, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, ValidationError
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import auth
@@ -186,9 +187,11 @@ async def voice(audio: UploadFile = File(...), _: User = CurrentUser, settings: 
     fmt = Path(audio.filename or "").suffix.lstrip(".").lower() or "wav"
     if fmt not in AUDIO_FORMATS:
         raise AppError(415, "audio_format", f"Audioformat „{fmt}“ wird nicht unterstützt.")
-    transcript = llm.transcribe(settings.transcription_model, data, fmt, settings.language)
+    # Modellaufrufe blockieren (httpx synchron) – im Arbeits-Thread, sonst steht der ganze Server, bis das Modell
+    # antwortet (async-Endpunkt wegen ``await audio.read``)
+    transcript = await run_in_threadpool(llm.transcribe, settings.transcription_model, data, fmt, settings.language)
     del data
-    drafts = extract_events(llm, transcript, settings, now)
+    drafts = await run_in_threadpool(extract_events, llm, transcript, settings, now)
     return _drafts_response(transcript, drafts)
 
 
@@ -217,7 +220,8 @@ async def photo(image: UploadFile = File(...), _: User = CurrentUser, settings: 
     if not mime:
         raise AppError(415, "image_format", "Dieses Bildformat wird nicht unterstützt. Bitte ein Foto als JPEG, "
                                             "PNG oder WebP wählen.")
-    text, drafts = extract_events_from_photo(llm, data, mime, settings, now)
+    # im Arbeits-Thread wie bei /api/voice: Bildmodelle brauchen oft lange, der Kalender soll derweil weiterlaufen
+    text, drafts = await run_in_threadpool(extract_events_from_photo, llm, data, mime, settings, now)
     del data
     message = ""
     if not drafts:

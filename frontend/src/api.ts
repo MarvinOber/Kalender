@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import type { CalEvent, Draft, EditableEvent, EditScope, Me, ModelInfo, ParseResult, Settings, Weather } from "./types";
 
 /** Fehler der API mit Code (z. B. „reauth“, „model_unavailable“) und verständlicher Meldung. */
@@ -5,6 +6,17 @@ export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) {
     super(message);
   }
+}
+
+/**
+ * Meldung, wenn die Antwort kein JSON des Backends ist – meist von Cloud Run selbst (504 nach 120 s, 502/503 beim
+ * Neustart). Das Backend bricht Modellaufrufe vorher mit eigener Meldung ab; das hier ist das Netz darunter.
+ */
+export function httpErrorMessage(status: number): string {
+  if (status === 504 || status === 408) return t("Der Server hat nicht rechtzeitig geantwortet. Bitte noch einmal versuchen.");
+  if (status === 502 || status === 503) return t("Der Server ist gerade nicht erreichbar. Bitte gleich noch einmal versuchen.");
+  if (status === 413) return t("Die Datei ist zu groß.");
+  return `${t("Unerwarteter Fehler")} (${status}). ${t("Bitte noch einmal versuchen.")}`;
 }
 
 async function request<T>(method: string, path: string, body?: BodyInit | object): Promise<T> {
@@ -19,11 +31,11 @@ async function request<T>(method: string, path: string, body?: BodyInit | object
   try {
     resp = await fetch(path, { method, headers, body: payload, credentials: "same-origin" });
   } catch {
-    throw new ApiError(0, "offline", "Keine Verbindung zum Server. Bitte Netzwerk prüfen.");
+    throw new ApiError(0, "offline", t("Keine Verbindung zum Server. Bitte Netzwerk prüfen."));
   }
   if (!resp.ok) {
     let code = "error";
-    let message = `Fehler ${resp.status}`;
+    let message = httpErrorMessage(resp.status);
     try {
       const data = await resp.json();
       code = data.code || code;

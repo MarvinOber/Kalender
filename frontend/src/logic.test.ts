@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { httpErrorMessage } from "./api";
 import { addDays, addMonths, isoWeek, mondayOf, nowIn, rangeLabel } from "./dates";
 import { matches, pruneFilter } from "./filter";
 import { allDayBars, dayItems, timedSegments, visibleHours } from "./layout";
@@ -192,5 +193,14 @@ describe("Foto", () => {
     vi.stubGlobal("window", {});
     expect(cameraAvailable()).toBe(false); // alter Browser ohne matchMedia
     vi.unstubAllGlobals();
+  });
+});
+
+describe("Fehlermeldungen ohne JSON", () => {
+  it("erklärt Zeitüberschreitung und Ausfall statt „Fehler 504“", () => {
+    expect(httpErrorMessage(504)).toBe("Der Server hat nicht rechtzeitig geantwortet. Bitte noch einmal versuchen.");
+    expect(httpErrorMessage(503)).toBe("Der Server ist gerade nicht erreichbar. Bitte gleich noch einmal versuchen.");
+    expect(httpErrorMessage(502)).toBe(httpErrorMessage(503));
+    expect(httpErrorMessage(500)).toBe("Unerwarteter Fehler (500). Bitte noch einmal versuchen.");
   });
 });

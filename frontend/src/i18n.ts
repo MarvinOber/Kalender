@@ -133,6 +133,14 @@ const EN: Record<string, string> = {
   "Dieses Bild lässt sich nicht öffnen. Bitte ein Foto als JPEG oder PNG wählen.":
     "This image cannot be opened. Please choose a JPEG or PNG photo.",
   "Das Foto ist zu groß (höchstens 10 MB).": "The photo is too large (10 MB at most).",
+  "Keine Verbindung zum Server. Bitte Netzwerk prüfen.": "No connection to the server. Please check the network.",
+  "Der Server hat nicht rechtzeitig geantwortet. Bitte noch einmal versuchen.":
+    "The server did not answer in time. Please try again.",
+  "Der Server ist gerade nicht erreichbar. Bitte gleich noch einmal versuchen.":
+    "The server is not reachable right now. Please try again shortly.",
+  "Die Datei ist zu groß.": "The file is too large.",
+  "Unerwarteter Fehler": "Unexpected error",
+  "Bitte noch einmal versuchen.": "Please try again.",
 };
 
 let lang: "de" | "en" = "de";

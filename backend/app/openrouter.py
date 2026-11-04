@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import base64
+import json
 import threading
 import time
+from collections.abc import Callable
 from typing import Any, Protocol
 
 import httpx
 
-from .errors import ModelUnavailable
+from .errors import ModelTimeout, ModelUnavailable
 
 BASE_URL = "https://openrouter.ai/api/v1"
 APP_TITLE = "Familienkalender"
 MODELS_TTL = 24 * 3600
+# Gesamtfrist für alle Modellaufrufe einer Anfrage (Sprache: Transkription + Erkennung). Cloud Run bricht nach
+# 120 s ab (scripts/deploy.ps1, --timeout); die Lücke bleibt für Upload und Antwort.
+MODEL_BUDGET_SECONDS = 90
 
 TRANSCRIBE_PROMPT = {
     "de": ("Transkribiere diese Sprachaufnahme wortgetreu auf Deutsch. Gib nur den gesprochenen Text aus – "
@@ -30,10 +35,16 @@ class LlmClient(Protocol):
 
 
 class OpenRouter:
-    def __init__(self, api_key: str, referer: str = "", client: httpx.Client | None = None) -> None:
+    """Ein Objekt je Anfrage (``llm_dep``): Die Frist beginnt beim Anlegen und gilt für alle Aufrufe zusammen."""
+
+    def __init__(self, api_key: str, referer: str = "", client: httpx.Client | None = None,
+                 budget: float = MODEL_BUDGET_SECONDS, clock: Callable[[], float] = time.monotonic) -> None:
         self._key = api_key
         self._referer = referer
-        self._client = client or httpx.Client(timeout=httpx.Timeout(90, connect=10))
+        self._client = client or httpx.Client()
+        self._budget = budget
+        self._clock = clock
+        self._deadline = clock() + budget
 
     def _headers(self) -> dict[str, str]:
         headers = {"Authorization": f"Bearer {self._key}", "X-OpenRouter-Title": APP_TITLE}
@@ -41,19 +52,44 @@ class OpenRouter:
             headers["HTTP-Referer"] = self._referer
         return headers
 
+    def _timeout(self, model: str) -> ModelTimeout:
+        return ModelTimeout(f"Das Modell {model} hat nicht rechtzeitig geantwortet (Abbruch nach "
+                            f"{self._budget:.0f} Sekunden). Bitte noch einmal versuchen oder in den Einstellungen "
+                            "ein schnelleres Modell wählen.")
+
+    def _post(self, model: str, body: dict[str, Any]) -> tuple[int, bytes]:
+        """Antwort stückweise lesen: OpenRouter hält langsame Antworten mit Leerzeichen wach, dann greift das
+        Lese-Timeout von httpx nie – die Gesamtfrist wird deshalb nach jedem Stück geprüft."""
+        remaining = self._deadline - self._clock()
+        if remaining <= 1:
+            raise self._timeout(model)
+        timeout = httpx.Timeout(remaining, connect=min(10.0, remaining))
+        try:
+            with self._client.stream("POST", f"{BASE_URL}/chat/completions", headers=self._headers(),
+                                     json=body, timeout=timeout) as resp:
+                chunks = []
+                for chunk in resp.iter_bytes():
+                    chunks.append(chunk)
+                    if self._clock() > self._deadline:
+                        raise self._timeout(model)  # verlässt den Block und schließt die Verbindung
+                return resp.status_code, b"".join(chunks)
+        except httpx.TimeoutException as exc:
+            raise self._timeout(model) from exc
+        except httpx.HTTPError as exc:
+            raise ModelUnavailable("OpenRouter ist gerade nicht erreichbar.") from exc
+
     def _chat(self, model: str, payload: dict[str, Any]) -> str:
         if not self._key:
             raise ModelUnavailable("Kein OpenRouter-Schlüssel eingerichtet (Secret OPENROUTER_API_KEY).")
+        status, raw = self._post(model, {"model": model, **payload})
+        if status >= 400:
+            raise ModelUnavailable(_error_message(status, raw, model))
         try:
-            resp = self._client.post(f"{BASE_URL}/chat/completions", headers=self._headers(),
-                                     json={"model": model, **payload})
-        except httpx.TimeoutException as exc:
-            raise ModelUnavailable(f"Das Modell {model} antwortet nicht rechtzeitig. Bitte erneut versuchen.") from exc
-        except httpx.HTTPError as exc:
-            raise ModelUnavailable("OpenRouter ist gerade nicht erreichbar.") from exc
-        if resp.status_code >= 400:
-            raise ModelUnavailable(_error_message(resp, model))
-        data = resp.json()
+            data = json.loads(raw)  # führende Leerzeichen vom Wachhalten stören json nicht
+        except ValueError as exc:
+            raise ModelUnavailable(f"Unerwartete Antwort von {model}.") from exc
+        if not isinstance(data, dict):
+            raise ModelUnavailable(f"Unerwartete Antwort von {model}.")
         if data.get("error"):
             raise ModelUnavailable(f"Das Modell {model} meldet einen Fehler: {data['error'].get('message', '')}")
         try:
@@ -80,22 +116,25 @@ class OpenRouter:
         })
 
 
-def _error_message(resp: httpx.Response, model: str) -> str:
+def _error_message(status: int, raw: bytes, model: str) -> str:
     try:
-        detail = resp.json().get("error", {}).get("message", "")
-    except ValueError:
+        detail = str(json.loads(raw).get("error", {}).get("message", ""))
+    except (ValueError, AttributeError):
         detail = ""
-    if resp.status_code == 401:
+    if status == 401:
         return "Der OpenRouter-Schlüssel ist ungültig."
-    if resp.status_code == 402:
+    if status == 402:
         return "Das Guthaben bei OpenRouter ist aufgebraucht."
-    if resp.status_code == 404 or "not a valid model" in detail.lower():
+    if status == 404 or "not a valid model" in detail.lower():
         return f"Das Modell {model} gibt es bei OpenRouter nicht (Einstellungen prüfen)."
-    if resp.status_code == 429:
+    if status == 408 or status == 504:
+        return (f"Das Modell {model} hat nicht rechtzeitig geantwortet. Bitte noch einmal versuchen oder in den "
+                "Einstellungen ein schnelleres Modell wählen.")
+    if status == 429:
         return f"Das Modell {model} ist gerade ausgelastet. Bitte gleich noch einmal."
-    if resp.status_code == 400:
+    if status == 400:
         return f"Das Modell {model} kann diese Anfrage nicht verarbeiten. {detail}".strip()
-    return f"Das Modell {model} ist nicht erreichbar (Fehler {resp.status_code})."
+    return f"Das Modell {model} ist nicht erreichbar (Fehler {status})."
 
 
 _models_cache: dict[str, Any] = {"at": 0.0, "data": []}

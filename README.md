@@ -78,7 +78,7 @@ Browser (Tablet) ──HTTPS──▶ Cloud Run „kalender“ (ein Image)
 | `backend/app/extraction.py` | Prompts (Sprache/Text und Foto), JSON-Schema, Prüfung der Modellantwort |
 | `backend/app/events.py` | Entwurf ↔ Google-Termin ↔ Anzeige, Tags, Wiederholung (RRULE) |
 | `backend/app/calendar_api.py` | Google Calendar über REST, lokale Attrappe |
-| `backend/app/openrouter.py` | OpenRouter-Aufrufe, Modellliste (24 Std im Speicher) |
+| `backend/app/openrouter.py` | OpenRouter-Aufrufe mit Gesamtfrist (90 s je Anfrage), Modellliste (24 Std im Speicher) |
 | `backend/app/weather.py` | aktuelles Wetter von Open-Meteo, 15 Min im Speicher |
 | `backend/app/settings.py` | Einstellungen der Familie (Firestore-Dokument `config/settings`) |
 | `frontend/src/` | React 18 + TypeScript + Vite |
@@ -145,14 +145,18 @@ npm test
   (`httpx.MockTransport`): Request-Body, Ganztägig/Standarddauer/Mitternacht, RRULE, Seitenweise lesen,
   Fehlerfälle, Rückweg zur Anzeige.
 - `test_api.py` – Abnahme Ende zu Ende (einsprechen → bestätigen → Wochenansicht, Filter „Lena“),
-  Modellwechsel ohne Deployment, nichts erkannt, Modell nicht erreichbar, CSRF-Schutz; Foto Ende zu Ende
+  Modellwechsel ohne Deployment, nichts erkannt, Modell nicht erreichbar, Modell zu langsam (504 mit Meldung),
+  Modellaufrufe laufen nicht im Event-Loop (sonst stünde der Server), CSRF-Schutz; Foto Ende zu Ende
   (fotografieren → bestätigen → Ansicht), Foto-Modell aus den Einstellungen, Bildformat am Inhalt erkannt,
   falsches Format, zu groß, kein Termin auf dem Foto.
+- `test_openrouter.py` – OpenRouter-Aufrufe gegen eine Attrappe (`httpx.MockTransport`, vorstellbare Uhr):
+  Leerzeichen zum Wachhalten, Gesamtfrist trotz Leerzeichen, Frist für die ganze Anfrage (Sprache: zwei
+  Aufrufe), Zeitüberschreitung von httpx, Fehlermeldungen je Status, unbrauchbare Antwort.
 - `test_auth.py` – Token-Erneuerung, abgelaufenes Token → neue Anmeldung, Pflichtangaben im Cloud-Betrieb.
 - `test_weather.py` – Open-Meteo-Abruf (Attrappe), Zwischenspeicher mit Rückfall auf den letzten Stand, Ort aus
   den Einstellungen.
 - `frontend/src/logic.test.ts` – Wochenrechnung, Filter, Überschneidungen, ganztägige Balken, Wettersymbole,
-  Maße beim Verkleinern der Fotos, Kamera-Auswahl nur auf Touch-Geräten.
+  Maße beim Verkleinern der Fotos, Kamera-Auswahl nur auf Touch-Geräten, Meldungen bei Antworten ohne JSON.
 - `frontend/src/style.test.ts` – Stilwahl mit Rückfall auf *Klassisch*, Namen und Übersetzungen, und dass
   `styles.css` für jeden Stil alle Variablen setzt (sonst erben die Vorschaukacheln Farben des aktiven Stils).
 - `test_extraction_live.py` – dieselben Sätze gegen das echte Modell (nur auf Wunsch, kostet Cent-Beträge):
@@ -278,6 +282,8 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | --- | --- |
 | Kein Mikrofonzugriff / kein Mikrofon / kein HTTPS | Meldung mit Knopf „Text eingeben“ |
 | Modell nicht erreichbar, Schlüssel ungültig, Guthaben leer, Modell-ID falsch | Meldung mit dem Modellnamen (HTTP 502) |
+| Modell zu langsam (zusammen über 90 Sekunden je Anfrage) | Abbruch mit Meldung „Das Modell … hat nicht rechtzeitig geantwortet … schnelleres Modell wählen“ (HTTP 504, `model_timeout`); der Kalender läuft derweil weiter |
+| Antwort ohne JSON (502/503/504 von Cloud Run) | „Der Server hat nicht rechtzeitig geantwortet“ bzw. „… ist gerade nicht erreichbar“ statt „Fehler 504“ |
 | Nichts verstanden / kein Termin erkannt | Hinweis im Dialog, Text lässt sich bearbeiten und neu erkennen |
 | Foto unleserlich / kein Termin auf dem Foto | Hinweis im Dialog mit Foto und Abschrift; „Neues Foto“ oder Text ergänzen |
 | Bild lässt sich nicht öffnen, falsches Format, über 10 MB | Meldung (JPEG, PNG oder WebP wählen) |
@@ -311,6 +317,8 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | Deploy-Parameter aus dem laufenden Dienst statt im Repo | Repo ist öffentlich; E-Mail-Adressen und Client-ID gehören nicht hinein. |
 | Foto über die Kamera-App bzw. Bildauswahl des Geräts (`<input type="file" accept="image/*">`) statt eigener Kameravorschau | Die Kamera-App fokussiert und belichtet Dokumente besser; die Galerie bringt auch Fotos vom Messenger. |
 | Zwei Datei-Inputs: „Foto aufnehmen“ mit `capture="environment"`, „Aus der Galerie“ ohne; Auswahlmenü nur bei `(pointer: coarse)` | Auftrag „direkt ein neues Foto machen“: Viele Android-Geräte zeigen ohne `capture` nur die Galerie. Desktop-Browser ignorieren `capture`, dort wäre „Kamera“ irreführend – der Knopf öffnet gleich die Dateien. |
+| Modellaufrufe von `/api/voice` und `/api/photo` per `run_in_threadpool` | Beide Endpunkte sind `async` (Upload lesen), httpx ist synchron: Im Event-Loop stand der ganze Server, bis das Modell antwortete – am 2026-11-04 hing ein Foto über 10 Minuten, alle Anfragen endeten nach 120 s mit 504 von Cloud Run. |
+| Gesamtfrist 90 s je Anfrage, Antwort stückweise gelesen und nach jedem Stück geprüft | OpenRouter hält langsame Antworten mit Leerzeichen wach, ein Lese-Timeout greift dann nie. 90 s liegen unter dem Cloud-Run-Limit von 120 s (`deploy.ps1`), so kommt die eigene Meldung mit Modellname und Tipp an. Kein höheres Cloud-Run-Limit: Länger als anderthalb Minuten wartet am Kalender niemand. |
 | Foto im Browser auf 2048 px (JPEG 85 %) verkleinern, Server nimmt höchstens 10 MB | reicht für Handschrift auf einer Kalenderseite, spart Upload und Bild-Token; entfernt nebenbei die Metadaten (Aufnahmeort). |
 | Eigenes Modellfeld `photo_model`, Standard `xiaomi/mimo-v2.6-pro` | Auftrag „Modell in der Config hinterlegen“; laut OpenRouter-Modellliste mit Bild-Eingabe und JSON-Schema, wie die anderen beiden Standardmodelle. |
 | Foto-Antwort mit Abschrift `text` vor den Terminen; „Neu erkennen“ nach Bearbeiten geht über den Text-Weg | Die Familie sieht, was gelesen wurde, und kann Lesefehler im Text korrigieren, ohne neu zu fotografieren; derselbe Dialog wie bei der Sprache. |
