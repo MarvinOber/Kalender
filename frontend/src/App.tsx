@@ -19,6 +19,7 @@ import { MAX_SECONDS, MicError, Recorder } from "./recorder";
 import type { CalEvent, EditScope, Me, ParseResult, Settings, Weather } from "./types";
 import { type View, inRange, loadView, rangeOf, samePeriod, saveView, step } from "./view";
 import { type Style, applyStyle, loadStyle, saveStyle } from "./style";
+import { syncPush } from "./push";
 
 const REFRESH_MS = 5 * 60_000; // Änderungen von anderen Geräten
 const IDLE_BACK_TO_TODAY_MS = 3 * 60_000; // Wandbetrieb: nach einer Weile zurück zu heute
@@ -133,7 +134,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (auth === "ok") loadSettings().catch(showError);
+    if (auth !== "ok") return;
+    loadSettings().catch(showError);
+    // Push-Abo still abgleichen (der Browser erneuert es gelegentlich); fragt nie nach einer Erlaubnis
+    syncPush().catch(() => undefined);
   }, [auth, loadSettings, showError]);
 
   useEffect(() => {

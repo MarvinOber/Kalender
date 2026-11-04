@@ -6,8 +6,10 @@
   Server-Konfiguration nur über Umgebungsvariablen in `backend/app/server_config.py`.
 - Umgebungsvariablen und Secrets setzt nur `scripts/deploy.ps1`, immer vollständig.
 - Der OpenRouter-Schlüssel geht nie an den Browser; Audio und Fotos werden nicht gespeichert.
+- Erinnerungen: Cloud Scheduler ruft alle 5 Min `POST /api/cron/reminders` (Geheimnis in `X-Kalender-Cron`);
+  Web Push ohne SDK in `backend/app/webpush.py`, Regeln in `backend/app/reminders.py`, Service Worker `frontend/public/sw.js`.
 - Tests ohne Netz: `cd backend; .venv\Scripts\python -m pytest` und `cd frontend; npm test`.
-  Abhängigkeiten über `app.dependency_overrides` ersetzen (`store_dep`, `llm_dep`, `now_dep`).
+  Abhängigkeiten über `app.dependency_overrides` ersetzen (`store_dep`, `llm_dep`, `now_dep`, `push_dep`).
 - Lokal: `scripts\dev.ps1` (ohne Anmeldung, Kalender-Attrappe, Demo-KI).
 - Texte deutsch; der deutsche Text ist der Übersetzungsschlüssel (`t("…")` in `frontend/src/i18n.ts`).
 - CSS ist global: neue Klassen vorher gegen `frontend/src/styles.css` prüfen.

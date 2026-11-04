@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Protocol
 from urllib.parse import quote
 
@@ -143,7 +143,8 @@ class LocalCalendar:
         raise CalendarError(EVENT_GONE, 404)
 
     def insert_event(self, calendar_id: str, body: dict[str, Any]) -> dict[str, Any]:
-        event = {**body, "id": uuid.uuid4().hex, "htmlLink": ""}
+        event = {**body, "id": uuid.uuid4().hex, "htmlLink": "",
+                 "created": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")}
         self._store.set(self.PATH, {"events": [*self._events(), event]})
         return event
 

@@ -1,7 +1,8 @@
 """Dokumentenspeicher: Firestore in der Cloud, eine JSON-Datei lokal und in Tests.
 
-Beide Umsetzungen verstehen dieselben Pfade (``config/settings``, ``users/<email>``). Mehr als Lesen, Schreiben
-und Löschen ganzer Dokumente braucht der Kalender nicht – die Termine selbst liegen in Google Calendar.
+Beide Umsetzungen verstehen dieselben Pfade (``config/settings``, ``users/<email>``, ``push_subscriptions/<id>``).
+Mehr als Lesen, Schreiben und Löschen ganzer Dokumente und das Auflisten einer Sammlung braucht der Kalender
+nicht – die Termine selbst liegen in Google Calendar.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ class DocStore(Protocol):
     def get(self, path: str) -> dict[str, Any] | None: ...
     def set(self, path: str, data: dict[str, Any]) -> None: ...
     def delete(self, path: str) -> None: ...
+    def list_docs(self, collection: str) -> list[dict[str, Any]]: ...
 
 
 class MemoryDocStore:
@@ -40,6 +42,11 @@ class MemoryDocStore:
         with self._lock:
             self._docs.pop(path, None)
             self._persist()
+
+    def list_docs(self, collection: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [json.loads(json.dumps(doc)) for path, doc in self._docs.items()
+                    if path.partition("/")[0] == collection]
 
     def _persist(self) -> None:
         pass
@@ -84,6 +91,9 @@ class FirestoreDocStore:
 
     def delete(self, path: str) -> None:
         self._db.document(self._key(path)).delete()
+
+    def list_docs(self, collection: str) -> list[dict[str, Any]]:
+        return [snap.to_dict() for snap in self._db.collection(collection).stream()]
 
 
 @lru_cache(maxsize=1)

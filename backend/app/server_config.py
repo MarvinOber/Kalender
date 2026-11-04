@@ -54,6 +54,8 @@ class ServerConfig:
     session_secret: str = ""
     openrouter_api_key: str = ""
     fake_llm: bool = False  # ohne KI-Kosten: feste Beispielaufnahme
+    vapid_private_key: str = ""  # Web Push; leer = lokal selbst erzeugt, in der Cloud: Push aus
+    cron_secret: str = ""  # Kopfzeile X-Kalender-Cron, mit der Cloud Scheduler die Erinnerungen anstößt
 
     @property
     def cloud(self) -> bool:
@@ -98,4 +100,6 @@ def get_config() -> ServerConfig:
         session_secret=session_secret or "nur-lokal-nicht-geheim",
         openrouter_api_key=os.environ.get("OPENROUTER_API_KEY", "").strip(),
         fake_llm=_flag("KALENDER_FAKE_LLM"),
+        vapid_private_key=os.environ.get("KALENDER_VAPID_PRIVATE_KEY", "").strip(),
+        cron_secret=os.environ.get("KALENDER_CRON_SECRET", "").strip(),
     )

@@ -1,5 +1,16 @@
 import { t } from "./i18n";
-import type { CalEvent, Draft, EditableEvent, EditScope, Me, ModelInfo, ParseResult, Settings, Weather } from "./types";
+import type {
+  CalEvent,
+  Draft,
+  EditableEvent,
+  EditScope,
+  Me,
+  ModelInfo,
+  ParseResult,
+  PushDevice,
+  Settings,
+  Weather,
+} from "./types";
 
 /** Fehler der API mit Code (z. B. „reauth“, „model_unavailable“) und verständlicher Meldung. */
 export class ApiError extends Error {
@@ -82,5 +93,11 @@ export const api = {
     }),
   remove: (id: string, scope: EditScope) =>
     request<{ ok: boolean }>("DELETE", `/api/events/${encodeURIComponent(id)}?scope=${scope}`),
+  pushKey: () => request<{ key: string }>("GET", "/api/push"),
+  /** `persons: null` behält die Auswahl auf dem Server (Abgleich beim Start). */
+  pushSubscribe: (sub: PushSubscriptionJSON, persons: string[] | null, device: string) =>
+    request<PushDevice>("POST", "/api/push/subscribe", { ...sub, persons, device }),
+  pushUnsubscribe: (endpoint: string) => request<{ ok: boolean }>("POST", "/api/push/unsubscribe", { endpoint }),
+  pushTest: (endpoint: string) => request<{ ok: boolean }>("POST", "/api/push/test", { endpoint }),
   logout: () => request<{ ok: boolean }>("POST", "/auth/logout"),
 };

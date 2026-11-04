@@ -4,8 +4,9 @@
 
 .DESCRIPTION
   Aktiviert die Dienste, legt Firestore, Dienstkonto, Artifact Registry und fehlende Secrets an, baut das Image
-  mit Cloud Build und veröffentlicht es als Cloud-Run-Dienst. Umgebungsvariablen und Secrets setzt NUR dieses
-  Skript – und zwar immer vollständig (--set-env-vars ersetzt die ganze Liste).
+  mit Cloud Build und veröffentlicht es als Cloud-Run-Dienst. Danach richtet es den Cloud-Scheduler-Job ein, der
+  alle 5 Minuten die Erinnerungen per Push anstößt. Umgebungsvariablen und Secrets setzt NUR dieses Skript – und
+  zwar immer vollständig (--set-env-vars ersetzt die ganze Liste).
 
   Vorher von Hand (siehe README): OAuth-Client anlegen, Secrets kalender-openrouter-key und
   kalender-oauth-client-secret füllen.
@@ -80,7 +81,7 @@ $Repo = "$Region-docker.pkg.dev/$ProjectId/$Service"
 Write-Host "== Dienste aktivieren" -ForegroundColor Cyan
 Invoke-Gcloud services enable run.googleapis.com firestore.googleapis.com secretmanager.googleapis.com `
   artifactregistry.googleapis.com cloudbuild.googleapis.com calendar-json.googleapis.com iam.googleapis.com `
-  billingbudgets.googleapis.com --quiet
+  billingbudgets.googleapis.com cloudscheduler.googleapis.com --quiet
 
 Write-Host "== Firestore" -ForegroundColor Cyan
 if (-not (Test-Gcloud firestore databases describe --database="(default)")) {
@@ -100,17 +101,41 @@ foreach ($name in @("$Service-openrouter-key", "$Service-oauth-client-secret")) 
     throw "Secret $name fehlt oder ist leer. Anlegen siehe README, Abschnitt 'Secrets'."
   }
 }
+function New-Secret([string] $Name, [string] $Value) {
+  # Ohne Zeilenumbruch und ohne BOM über eine Datei – der Wert erscheint nie in Kommandozeile oder Ausgabe
+  $tmp = New-TemporaryFile
+  try {
+    [IO.File]::WriteAllText($tmp, $Value)
+    Invoke-Gcloud secrets create $Name --data-file=$tmp --replication-policy=automatic --quiet | Out-Null
+  } finally { Remove-Item $tmp }
+}
+
+function New-RandomBytes([int] $Count) {
+  $bytes = New-Object byte[] $Count
+  [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+  return , $bytes
+}
+
 $SessionSecret = "$Service-session-secret"
 if (-not (Test-Gcloud secrets describe $SessionSecret)) {
   # Zufälliger Schlüssel für die Sitzungs-Cookies – wird nie angezeigt
-  $bytes = New-Object byte[] 48
-  [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-  $tmp = New-TemporaryFile
-  [IO.File]::WriteAllText($tmp, [Convert]::ToBase64String($bytes))
-  Invoke-Gcloud secrets create $SessionSecret --data-file=$tmp --replication-policy=automatic --quiet
-  Remove-Item $tmp
+  New-Secret $SessionSecret ([Convert]::ToBase64String((New-RandomBytes 48)))
 }
-foreach ($name in @("$Service-openrouter-key", "$Service-oauth-client-secret", $SessionSecret)) {
+$VapidSecret = "$Service-vapid-key"
+if (-not (Test-Gcloud secrets describe $VapidSecret)) {
+  # P-256-Schlüssel für Web Push (VAPID): die 32 Byte des privaten Teils als base64url, den öffentlichen leitet der
+  # Server ab. Ein neuer Schlüssel macht alle Abos ungültig; die App abonniert beim nächsten Start selbst neu.
+  $ec = [System.Security.Cryptography.ECDsa]::Create([System.Security.Cryptography.ECCurve+NamedCurves]::nistP256)
+  $d = $ec.ExportParameters($true).D
+  New-Secret $VapidSecret ([Convert]::ToBase64String($d).TrimEnd("=").Replace("+", "-").Replace("/", "_"))
+}
+$CronSecret = "$Service-cron-secret"
+if (-not (Test-Gcloud secrets describe $CronSecret)) {
+  # Kopfzeile, mit der Cloud Scheduler den Erinnerungslauf anstößt (hex: passt in die --headers-Liste)
+  New-Secret $CronSecret (((New-RandomBytes 32) | ForEach-Object { $_.ToString("x2") }) -join "")
+}
+foreach ($name in @("$Service-openrouter-key", "$Service-oauth-client-secret", $SessionSecret, $VapidSecret,
+    $CronSecret)) {
   Invoke-Gcloud secrets add-iam-policy-binding $name --member="serviceAccount:$Sa" `
     --role=roles/secretmanager.secretAccessor --quiet | Out-Null
 }
@@ -145,7 +170,8 @@ if (-not $PublicUrl) {
 $envVars = "^;^KALENDER_BACKEND=cloud;GOOGLE_CLOUD_PROJECT=$ProjectId;GOOGLE_OAUTH_CLIENT_ID=$OAuthClientId;" +
   "KALENDER_ALLOWED_EMAILS=$AllowedEmails;KALENDER_PUBLIC_URL=$PublicUrl"
 $secrets = "OPENROUTER_API_KEY=$Service-openrouter-key:latest,GOOGLE_OAUTH_CLIENT_SECRET=$Service-oauth-client-secret:latest," +
-  "KALENDER_SESSION_SECRET=${SessionSecret}:latest"
+  "KALENDER_SESSION_SECRET=${SessionSecret}:latest,KALENDER_VAPID_PRIVATE_KEY=${VapidSecret}:latest," +
+  "KALENDER_CRON_SECRET=${CronSecret}:latest"
 Invoke-Gcloud run deploy $Service --image $Image --region $Region --service-account $Sa --allow-unauthenticated `
   --memory 512Mi --cpu 1 --concurrency 20 --min-instances 0 --max-instances 2 --timeout 120 --cpu-boost `
   --set-env-vars $envVars --set-secrets $secrets --quiet
@@ -156,6 +182,23 @@ if (-not $PublicUrl) {
   Invoke-Gcloud run services update $Service --region $Region --update-env-vars "KALENDER_PUBLIC_URL=$Url" --quiet
   $PublicUrl = $Url
 }
+
+Write-Host "== Cloud Scheduler (Erinnerungen alle 5 Minuten)" -ForegroundColor Cyan
+# Cloud Run läuft nur bei Anfragen – der Job weckt den Dienst, der dann fällige Erinnerungen verschickt.
+# Das Geheimnis geht über eine Flags-Datei an gcloud, nicht über die Kommandozeile (auch nicht in Fehlermeldungen).
+$Job = "$Service-erinnerungen"
+$cronValue = Get-Gcloud secrets versions access latest --secret=$CronSecret
+$exists = Test-Gcloud scheduler jobs describe $Job --location=$Region
+$headerFlag = if ($exists) { "--update-headers" } else { "--headers" }
+$flags = New-TemporaryFile
+try {
+  [IO.File]::WriteAllText($flags, "${headerFlag}: X-Kalender=1,X-Kalender-Cron=$cronValue`n")
+  $jobArgs = @("--location=$Region", "--schedule=*/5 * * * *", "--time-zone=Europe/Berlin",
+    "--uri=$PublicUrl/api/cron/reminders", "--http-method=POST", "--attempt-deadline=90s",
+    "--flags-file=$flags", "--quiet")
+  $verb = if ($exists) { "update" } else { "create" }
+  Invoke-Gcloud scheduler jobs $verb http $Job @jobArgs | Out-Null
+} finally { Remove-Item $flags }
 
 if ($BudgetEur -gt 0 -and $BillingAccount) {
   Write-Host "== Budget-Warnung ($BudgetEur EUR/Monat)" -ForegroundColor Cyan
@@ -168,6 +211,6 @@ if ($BudgetEur -gt 0 -and $BillingAccount) {
 }
 
 Write-Host ""
-Write-Host "Fertig: $PublicUrl" -ForegroundColor Green
+Write-Host "Fertig: $PublicUrl (Erinnerungen: Job $Job alle 5 Minuten)" -ForegroundColor Green
 Write-Host "Beim OAuth-Client als autorisierte Weiterleitungs-URI eintragen (einmalig, von Hand):"
 Write-Host "  $PublicUrl/auth/callback"

@@ -19,6 +19,8 @@ SETTINGS_PATH = "config/settings"
 DEFAULT_TRANSCRIPTION_MODEL = "xiaomi/mimo-v2.6-pro"
 DEFAULT_EXTRACTION_MODEL = "xiaomi/mimo-v2.6-pro"
 DEFAULT_PHOTO_MODEL = "xiaomi/mimo-v2.6-pro"  # nimmt Bilder an und kann JSON-Schema
+DEFAULT_REMINDERS_MIN = [7 * 24 * 60, 24 * 60, 60]  # Push-Erinnerung 1 Woche, 1 Tag und 1 Stunde vorher
+MAX_REMINDER_MIN = 28 * 24 * 60  # länger hält der Push-Dienst keine Nachricht vor
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -96,6 +98,8 @@ class Settings(BaseModel):
     weather_place: str = Field(default="Bokel", max_length=60)
     weather_lat: float = Field(default=53.86667, ge=-90, le=90)
     weather_lon: float = Field(default=9.73333, ge=-180, le=180)
+    # Minuten vor Beginn (ganztägig: vor 9 Uhr am Tag); leere Liste = keine Erinnerungen
+    reminder_offsets_min: list[int] = Field(default_factory=lambda: list(DEFAULT_REMINDERS_MIN), max_length=8)
 
     @field_validator("calendar_id", "transcription_model", "extraction_model", "photo_model")
     @classmethod
@@ -104,6 +108,13 @@ class Settings(BaseModel):
         if not v:
             raise ValueError("darf nicht leer sein")
         return v
+
+    @field_validator("reminder_offsets_min")
+    @classmethod
+    def _reminders(cls, v: list[int]) -> list[int]:
+        if any(m < 5 or m > MAX_REMINDER_MIN for m in v):
+            raise ValueError("Erinnerung zwischen 5 Minuten und 4 Wochen vorher")
+        return sorted(set(v), reverse=True)
 
     @field_validator("language")
     @classmethod

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";
+import { offsetLabel, REMINDER_CHOICES } from "../push";
 import { STYLE_HINTS, STYLE_LABELS, STYLES, type Style } from "../style";
 import type { EventTag, Me, ModelInfo, Person, Settings } from "../types";
 import { colorVar } from "./eventStyle";
+import { PushDeviceSettings } from "./PushDeviceSettings";
 
 interface Props {
   settings: Settings;
@@ -72,6 +74,16 @@ export function SettingsPanel({ settings, me, style, onPreviewStyle, onStyle, on
     setAliases({});
     setS(kind === "persons" ? { ...next, persons: next.persons.filter((_, j) => j !== i) } : { ...next, event_tags: next.event_tags.filter((_, j) => j !== i) });
   };
+
+  // eigene Werte (z. B. von Hand in Firestore) bleiben wählbar
+  const reminderChoices = [...new Set([...REMINDER_CHOICES, ...s.reminder_offsets_min])].sort((a, b) => b - a);
+  const toggleReminder = (m: number) =>
+    setS((x) => ({
+      ...x,
+      reminder_offsets_min: x.reminder_offsets_min.includes(m)
+        ? x.reminder_offsets_min.filter((y) => y !== m)
+        : [...x.reminder_offsets_min, m].sort((a, b) => b - a),
+    }));
 
   const chooseLook = (st: Style) => {
     setLook(st);
@@ -163,6 +175,30 @@ export function SettingsPanel({ settings, me, style, onPreviewStyle, onStyle, on
                 </div>
               </div>
             )}
+          </section>
+
+          <section>
+            <h3>{t("Erinnerungen")}</h3>
+            <div className="chips">
+              <span>{t("Vorher erinnern (für alle Geräte)")}</span>
+              <div>
+                {reminderChoices.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`chip ${s.reminder_offsets_min.includes(m) ? "on" : ""}`}
+                    aria-pressed={s.reminder_offsets_min.includes(m)}
+                    onClick={() => toggleReminder(m)}
+                  >
+                    {t(offsetLabel(m))}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <PushDeviceSettings persons={settings.persons} onError={onError} />
+            <p className="small">
+              {t("Push-Benachrichtigung aufs Handy zu jedem Termin. Ganztägige Termine zählen ab 9 Uhr am Tag selbst; an Termine, die erst nach der Erinnerungszeit angelegt werden, wird nicht nachträglich erinnert.")}
+            </p>
           </section>
 
           <section>

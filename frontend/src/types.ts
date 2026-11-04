@@ -24,6 +24,12 @@ export interface Settings {
   weather_place: string; // leer = kein Wetter-Icon
   weather_lat: number;
   weather_lon: number;
+  reminder_offsets_min: number[]; // Push-Erinnerung so viele Minuten vor Beginn (ganztägig: vor 9 Uhr am Tag)
+}
+
+/** Ein Gerät mit eingeschalteten Erinnerungen; `persons` leer = alle Termine. */
+export interface PushDevice {
+  persons: string[];
 }
 
 /** Aktuelles Wetter am Ort aus den Einstellungen; ohne Ort nur `place: ""`. */

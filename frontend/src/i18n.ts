@@ -141,6 +141,36 @@ const EN: Record<string, string> = {
   "Die Datei ist zu groß.": "The file is too large.",
   "Unerwarteter Fehler": "Unexpected error",
   "Bitte noch einmal versuchen.": "Please try again.",
+  "Erinnerungen": "Reminders",
+  "Vorher erinnern (für alle Geräte)": "Remind before (all devices)",
+  "1 Woche": "1 week",
+  "2 Wochen": "2 weeks",
+  "1 Tag": "1 day",
+  "2 Tage": "2 days",
+  "3 Tage": "3 days",
+  "1 Stunde": "1 hour",
+  "2 Stunden": "2 hours",
+  "3 Stunden": "3 hours",
+  "15 Minuten": "15 minutes",
+  "30 Minuten": "30 minutes",
+  "Auf diesem Gerät": "On this device",
+  "an": "on",
+  "aus": "off",
+  "Erinnerungen einschalten": "Turn on reminders",
+  "Test senden": "Send test",
+  "Ausschalten": "Turn off",
+  "Erinnern an Termine von": "Remind about events of",
+  "Eingeschaltet. Mit „Test senden“ lässt es sich ausprobieren.": "Turned on. Use “Send test” to try it.",
+  "Test gesendet – die Benachrichtigung kommt in wenigen Sekunden.":
+    "Test sent – the notification will arrive in a few seconds.",
+  "Dieser Browser kann keine Benachrichtigungen empfangen. Auf Android Chrome verwenden, auf dem iPhone die App zuerst zum Home-Bildschirm hinzufügen.":
+    "This browser cannot receive notifications. Use Chrome on Android; on an iPhone add the app to the home screen first.",
+  "Benachrichtigungen sind für diese Seite blockiert. Im Browser über das Symbol links neben der Adresse → Berechtigungen → Benachrichtigungen erlauben.":
+    "Notifications are blocked for this site. Allow them in the browser via the icon left of the address → Permissions → Notifications.",
+  "Push-Benachrichtigung aufs Handy zu jedem Termin. Ganztägige Termine zählen ab 9 Uhr am Tag selbst; an Termine, die erst nach der Erinnerungszeit angelegt werden, wird nicht nachträglich erinnert.":
+    "Push notification to your phone for every event. All-day events count from 9 am on the day; events created after the reminder time get no late reminder.",
+  "Benachrichtigungen sind auf dem Server nicht eingerichtet.": "Notifications are not set up on the server.",
+  "Erinnerungen sind auf diesem Gerät aus.": "Reminders are off on this device.",
 };
 
 let lang: "de" | "en" = "de";

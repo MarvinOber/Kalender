@@ -37,6 +37,15 @@ von einer KI in strukturierte Einträge verwandelt, im Dialog bestätigt und dan
   der Personenfarbe), *Papier* (wie ein gedruckter Wandkalender) und *Nacht* (immer dunkel, gedämpft). Auswahl
   ganz oben in den Einstellungen über Vorschaukacheln; Antippen zeigt den Stil sofort zur Probe, „Speichern“
   übernimmt ihn, „Abbrechen“ verwirft ihn. Gilt je Gerät (`localStorage`), Standard *Klassisch*.
+- **Erinnerungen per Push** aufs Handy (Android: Chrome, auch ohne geöffnete App): standardmäßig **1 Woche, 1 Tag
+  und 1 Stunde** vor jedem Termin, z. B. „Fußball – Morgen, 16:00 Uhr · Lena · Sportplatz“. Einschalten je Gerät in
+  den Einstellungen unter *Erinnerungen* („Erinnerungen einschalten“, Browser fragt einmal nach der Erlaubnis),
+  dort auch „Test senden“ und die Wahl, zu wessen Terminen dieses Gerät erinnert (Standard *Alle*; Termine ohne
+  Person kommen immer). Die Vorlaufzeiten (1 Woche, 3 Tage, 1 Tag, 3 Stunden, 1 Stunde, 15 Minuten) gelten für die
+  ganze Familie und liegen in `config/settings`. Ganztägige Termine zählen ab 9 Uhr am Tag selbst („1 Tag vorher“ =
+  9 Uhr am Vortag, „1 Stunde vorher“ = 8 Uhr am Tag). Eine neue Erinnerung zum selben Termin ersetzt die vorige auf
+  dem Handy; Tippen öffnet den Kalender. Nachträglich wird nicht erinnert: nicht an Termine, die erst nach der
+  Erinnerungszeit angelegt wurden, und nicht an Geräte, die erst danach eingeschaltet wurden.
 - **Wetter**: kleines Icon mit Temperatur neben der Uhr (Open-Meteo, ohne Schlüssel, über das Backend und dort
   15 Minuten zwischengespeichert). Ort und Koordinaten in den Einstellungen; ohne Ort kein Icon.
 - **Einstellungen** für die ganze Familie in Firestore: Kalender, drei Modelle – Transkription, Termin-Erkennung,
@@ -67,13 +76,18 @@ Standard daher auch für die Foto-Auswertung. Das Bild geht als Inhaltsteil `ima
 
 ```
 Browser (Tablet) ──HTTPS──▶ Cloud Run „kalender“ (ein Image)
-                              ├─ /            gebaute React-Oberfläche
+                              ├─ /            gebaute React-Oberfläche, /sw.js (Service Worker für Push)
                               ├─ /auth/*      Google-OAuth (Code-Flow, Refresh-Token serverseitig)
                               └─ /api/*       FastAPI
-                                   ├─ Firestore: config/settings, users/<email>
-                                   ├─ Secret Manager: OpenRouter-Key, OAuth-Secret, Sitzungsschlüssel
+                                   ├─ Firestore: config/settings, users/<email>, push_subscriptions/<id>,
+                                   │             config/reminders_sent
+                                   ├─ Secret Manager: OpenRouter-Key, OAuth-Secret, Sitzungsschlüssel,
+                                   │                  VAPID-Schlüssel, Cron-Geheimnis
                                    ├─ OpenRouter: Transkription, Termin-Erkennung, Foto-Auswertung
-                                   └─ Google Calendar API v3 (REST)
+                                   ├─ Google Calendar API v3 (REST)
+                                   └─ Web Push (VAPID) ──▶ Push-Dienst des Browsers (Android: FCM) ──▶ Handy
+
+Cloud Scheduler „kalender-erinnerungen“ ──alle 5 Min──▶ POST /api/cron/reminders
 ```
 
 | Ordner | Inhalt |
@@ -86,8 +100,12 @@ Browser (Tablet) ──HTTPS──▶ Cloud Run „kalender“ (ein Image)
 | `backend/app/openrouter.py` | OpenRouter-Aufrufe mit Gesamtfrist (90 s je Anfrage), Modellliste (24 Std im Speicher) |
 | `backend/app/weather.py` | aktuelles Wetter von Open-Meteo, 15 Min im Speicher |
 | `backend/app/settings.py` | Einstellungen der Familie (Firestore-Dokument `config/settings`) |
+| `backend/app/reminders.py` | Erinnerungen: Abos je Gerät, fällige Erinnerungen, Text der Benachrichtigung, Lauf für Cloud Scheduler |
+| `backend/app/webpush.py` | Web Push ohne SDK: VAPID-Token (RFC 8292), Verschlüsselung `aes128gcm` (RFC 8291), Versand |
 | `frontend/src/` | React 18 + TypeScript + Vite |
 | `frontend/src/photo.ts` | Foto im Browser verkleinern (2048 px, JPEG, ohne Metadaten) |
+| `frontend/src/push.ts`, `components/PushDeviceSettings.tsx` | Push abonnieren, beim Start abgleichen, Einschalten/Test/Personen je Gerät |
+| `frontend/public/sw.js` | Service Worker: zeigt Push-Nachrichten an, Tippen öffnet den Kalender (kein Offline-Zwischenspeicher) |
 | `frontend/src/components/Header.tsx` | Kopf; Breitbild und Handy aus demselben Markup, umgeschaltet in `styles.css` („Handy“) |
 | `frontend/src/components/ViewMenu.tsx`, `useDismiss.ts` | Ansicht als Aufklappmenü (Handy); Menüs schließen bei Tippen daneben oder Escape |
 | `scripts/deploy.ps1` | Einrichtung und Deployment (idempotent) |
@@ -132,7 +150,12 @@ dann `http://localhost:5173`. Echte KI lokal: in `backend/.env` `KALENDER_FAKE_L
 Variablen aus `backend/.env.example` und `http://localhost:8080/auth/callback` als Weiterleitungs-URI beim
 OAuth-Client.
 
-Das Mikrofon funktioniert nur über HTTPS oder `localhost`.
+Das Mikrofon funktioniert nur über HTTPS oder `localhost`. Erinnerungen lassen sich lokal in Chrome einschalten (der
+VAPID-Schlüssel entsteht dann von selbst im lokalen Speicher); den Erinnerungslauf stößt man von Hand an:
+
+```powershell
+curl.exe -X POST -H "X-Kalender: 1" http://localhost:8080/api/cron/reminders
+```
 
 ## Tests
 
@@ -160,10 +183,21 @@ npm test
   Leerzeichen zum Wachhalten, Gesamtfrist trotz Leerzeichen, Frist für die ganze Anfrage (Sprache: zwei
   Aufrufe), Zeitüberschreitung von httpx, Fehlermeldungen je Status, unbrauchbare Antwort.
 - `test_auth.py` – Token-Erneuerung, abgelaufenes Token → neue Anmeldung, Pflichtangaben im Cloud-Betrieb.
+- `test_push.py` – Web Push: Verschlüsselung entschlüsselt mit `http_ece` (unabhängige Umsetzung) und gleicht ihr
+  bytegenau, VAPID-Token gültig signiert (`aud`, `exp`, `sub`), Schlüsselformat des Deploy-Skripts, Versand gegen
+  eine Attrappe des Push-Dienstes (Kopfzeilen, TTL höchstens 4 Wochen, 404/410 = Abo weg, Störung).
+- `test_reminders.py` – 1 Stunde, 1 Tag und 1 Woche vorher mit Text und TTL, nichts doppelt, erst wenn fällig,
+  ganztägig ab 9 Uhr, mehrtägig, verpasste Läufe höchstens 2 Std nachholen, nicht nach Beginn, nicht für später
+  angelegte Termine oder später eingeschaltete Geräte, Personen je Gerät, Kalenderzugang je Konto, abgelaufene
+  Anmeldung bremst die anderen nicht, beendetes Abo wird entfernt, Störung wird nachgeholt, Vorlaufzeiten aus den
+  Einstellungen, Englisch, Aufräumen; über die API: Schlüssel, Abo anlegen/abgleichen/abmelden, Prüfung, Test-
+  Nachricht, Abnahme (Termin anlegen → Lauf einen Tag vorher → „Morgen, 10:00 Uhr …“), Lauf nur mit Geheimnis.
 - `test_weather.py` – Open-Meteo-Abruf (Attrappe), Zwischenspeicher mit Rückfall auf den letzten Stand, Ort aus
   den Einstellungen.
 - `frontend/src/logic.test.ts` – Wochenrechnung, Zeitraum-Titel (auch kurz fürs Handy), Filter, Überschneidungen, ganztägige Balken, Monatsbalken und „+n weitere“, Wettersymbole,
   Maße beim Verkleinern der Fotos, Kamera-Auswahl nur auf Touch-Geräten, Meldungen bei Antworten ohne JSON.
+- `frontend/src/push.test.ts` – Namen der Vorlaufzeiten, Server-Schlüssel als Bytes, Schlüsselwechsel, Gerätename,
+  Service Worker zeigt an und öffnet beim Tippen (ohne `fetch`-Handler).
 - `frontend/src/style.test.ts` – Stilwahl mit Rückfall auf *Klassisch*, Namen und Übersetzungen, und dass
   `styles.css` für jeden Stil alle Variablen setzt (sonst erben die Vorschaukacheln Farben des aktiven Stils).
 - `test_extraction_live.py` – dieselben Sätze gegen das echte Modell (nur auf Wunsch, kostet Cent-Beträge):
@@ -229,9 +263,12 @@ In der Cloud Console unter **Google Auth Platform**:
 ```
 
 Das Skript aktiviert Dienste (Cloud Run, Firestore, Secret Manager, Artifact Registry, Cloud Build, Calendar
-API), legt Firestore (`eur3`), das Dienstkonto `kalender-run` (nur `roles/datastore.user` und Zugriff auf die
-drei Secrets) und die Artifact Registry mit Aufräumregel an, baut das Image mit Cloud Build und veröffentlicht
-den Dienst `kalender` in `europe-west1`. Erneut ausführen nach jeder Code- oder Einstellungsänderung; es setzt
+API, Cloud Scheduler), legt Firestore (`eur3`), das Dienstkonto `kalender-run` (nur `roles/datastore.user` und
+Zugriff auf die Secrets) und die Artifact Registry mit Aufräumregel an, baut das Image mit Cloud Build und
+veröffentlicht den Dienst `kalender` in `europe-west1`. Die Secrets `kalender-vapid-key` (P-256-Schlüssel für Web
+Push) und `kalender-cron-secret` erzeugt es beim ersten Lauf selbst; danach legt bzw. aktualisiert es den
+Cloud-Scheduler-Job `kalender-erinnerungen` (alle 5 Minuten `POST /api/cron/reminders` mit dem Geheimnis in der
+Kopfzeile `X-Kalender-Cron`). Erneut ausführen nach jeder Code- oder Einstellungsänderung; es setzt
 Umgebungsvariablen und Secrets immer vollständig.
 
 Folge-Deployments brauchen keine Parameter: Das Projekt kommt aus `gcloud config`, OAuth-Client-ID,
@@ -271,9 +308,20 @@ der App lässt sie sich auch direkt aus der Liste wählen.
   per Wake-Lock wach, solange sie sichtbar ist.
 - Die Anmeldung gilt 180 Tage (Sitzungs-Cookie); das Google-Token erneuert der Server selbst.
 
+### 8. Erinnerungen auf dem Handy
+
+- Adresse in Chrome auf dem Android-Handy öffnen und anmelden (gern *Zum Startbildschirm hinzufügen*).
+- Einstellungen → *Erinnerungen* → „Erinnerungen einschalten“ → Benachrichtigungen erlauben → „Test senden“.
+- Bleibt die Test-Nachricht aus: In den Android-Einstellungen *Apps → Chrome → Benachrichtigungen* erlauben und
+  für Chrome den Energiesparmodus *Nicht eingeschränkt* wählen (manche Hersteller beenden Chrome sonst im
+  Hintergrund).
+- Jedes Gerät meldet sich einzeln an; auf dem Wand-Tablet muss nichts eingeschaltet werden.
+
 ### Kosten
 
-Cloud Run, Firestore, Secret Manager und Artifact Registry bleiben bei Familiennutzung im Gratiskontingent.
+Cloud Run, Firestore, Secret Manager und Artifact Registry bleiben bei Familiennutzung im Gratiskontingent; Cloud
+Scheduler ist bis drei Jobs je Rechnungskonto frei, der Lauf alle 5 Minuten (rund 8.600 Aufrufe im Monat, je ein
+Kalenderabruf je Familienmitglied mit Abo) liegt weit unter den Gratisgrenzen von Cloud Run und Firestore.
 Echte Kosten entstehen nur bei OpenRouter (eine Aufnahme oder ein Foto mit MiMo-V2.6-Pro: deutlich unter einem
 Cent). Budget
 mit Warnung empfohlen:
@@ -297,6 +345,11 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | Google-Token abgelaufen oder widerrufen | Banner „Die Google-Anmeldung ist abgelaufen“ mit „Erneut anmelden“ |
 | Kalender-ID falsch oder ohne Schreibrecht | Meldung mit Hinweis auf die Einstellungen |
 | Server nicht erreichbar | letzter Stand bleibt sichtbar, Fußzeile „offline“ |
+| Benachrichtigungen im Browser blockiert | Hinweis in den Einstellungen, wie man sie wieder erlaubt |
+| Browser ohne Push (z. B. iPhone ohne Home-Bildschirm-App) | Hinweis in den Einstellungen |
+| Abo beendet (Browserdaten gelöscht, Erlaubnis entzogen) | Push-Dienst meldet 404/410 → Abo wird gelöscht; „Test senden“ meldet „neu einschalten“ |
+| Push-Dienst gestört | Erinnerung bleibt offen und geht beim nächsten Lauf (bis 2 Std nach Fälligkeit) |
+| Google-Anmeldung eines Familienmitglieds abgelaufen | dessen Geräte bekommen keine Erinnerungen, bis es sich neu anmeldet; die anderen schon |
 
 ## Getroffene Annahmen
 
@@ -335,4 +388,18 @@ gcloud billing budgets create --billing-account=KONTO-ID --display-name="Familie
 | Foto-Antwort mit Abschrift `text` vor den Terminen; „Neu erkennen“ nach Bearbeiten geht über den Text-Weg | Die Familie sieht, was gelesen wurde, und kann Lesefehler im Text korrigieren, ohne neu zu fotografieren; derselbe Dialog wie bei der Sprache. |
 | Termine vor heute lässt das Modell weg; geliefert werden sie markiert statt verworfen | Kalenderblätter zeigen auch Vergangenes; ein falsch geratenes Jahr soll aber nicht still verschwinden. |
 | Bildformat am Dateianfang erkennen (JPEG, PNG, WebP, GIF) | Dateiname und Content-Type vom Browser sind unzuverlässig (z. B. „.heic“ nach der Umwandlung). |
+| Erinnerungen per Web Push (VAPID) mit Service Worker statt nativer App oder Firebase Cloud Messaging | Die App ist eine Web-App ohne App-Hülle; Chrome auf Android empfängt Web Push auch bei geschlossener App und stellt selbst über FCM zu. Kein Firebase-Projekt, kein SDK im Browser. |
+| Web Push selbst umgesetzt (`cryptography` + httpx, rund 100 Zeilen) statt `pywebpush` | Wie Calendar und OpenRouter direkt über REST; `pywebpush` brächte `requests`, `py-vapid` und weitere Pakete mit. Gegenprobe in den Tests mit `http_ece` (Referenzumsetzung der web-push-libs) – bytegleich. |
+| Cloud Scheduler alle 5 Minuten statt Zeitgeber im Dienst | Cloud Run skaliert auf null; ein Zeitgeber im Prozess liefe nicht. 5 Minuten: Erinnerungen kommen höchstens 5 Min später als die volle Stunde, kostet nichts. |
+| Cloud Scheduler meldet sich mit einem Geheimnis in einer Kopfzeile statt mit OIDC-Token | Der Dienst ist öffentlich (eigene Anmeldung); die Prüfung eines Google-ID-Tokens bräuchte Zertifikatsabruf und eine weitere Rolle. Geheimnis im Secret Manager, vom Deploy-Skript erzeugt, Vergleich zeitkonstant. |
+| VAPID-Schlüssel im Secret Manager, vom Deploy-Skript erzeugt; lokal von selbst im lokalen Speicher | Muster „jeder Schlüssel in den Secret Manager“; kein Schritt von Hand. Kontaktangabe `sub` ist die Adresse der App – eine E-Mail gehört nicht ins öffentliche Repo. |
+| Kalender je Familienmitglied mit dessen eigenem Google-Zugang lesen | Die Kalender-ID kann `primary` sein (je Konto ein anderer Kalender); jeder bekommt nur Erinnerungen zu Terminen, die er sehen darf. |
+| Ganztägige Termine ab 9 Uhr am Tag selbst | „1 Stunde vor Mitternacht“ wäre nachts; so gilt eine Regel für alle Vorlaufzeiten (Google erinnert ganztägig ebenfalls tagsüber). |
+| Keine Erinnerung nachträglich (Termin oder Gerät später als die Erinnerungszeit), verpasste Läufe höchstens 2 Std | Sonst käme beim Einschalten oder Anlegen eines kurzfristigen Termins ein Schwall verspäteter Nachrichten; 2 Std überbrücken Neustarts und Störungen. Gemerkt je Gerät und Erinnerung in `config/reminders_sent`, aufgeräumt einen Tag nach Beginn. |
+| Personen-Auswahl je Gerät, Standard *Alle*, Termine ohne Person immer | Auftrag „mir zum Termin“ = alle Termine; in einer Familie will aber nicht jeder an jedes Training erinnert werden. Familientermine (ohne Person) betreffen alle. |
+| Vorlaufzeiten in `config/settings` für alle, Ein/Aus und Personen je Gerät (wirkt sofort) | Regel „Einstellungen der Familie in Firestore“; das Einschalten braucht die Erlaubnis des Browsers und damit ein Tippen auf genau diesem Gerät. |
+| Eine Benachrichtigung je Termin (`tag`), die nächste ersetzt die vorige | Drei Erinnerungen zum selben Termin sollen sich nicht stapeln. |
+| `Urgency: high` für alle Erinnerungen | Android stellt normale Nachrichten im Ruhemodus (Doze) verzögert zu; eine Erinnerung „1 Stunde vorher“ wäre dann zu spät. |
+| Service Worker ohne `fetch`-Handler | Nur für Push; die Oberfläche lädt weiter frisch vom Server, kein Zwischenspeicher, der alte Stände zeigt. |
+| PNG-Icons (`icon-192.png`, `icon-512.png`, `badge-96.png`) aus den Formen des Favicons | Android zeigt in Benachrichtigungen keine SVG-Icons; das Badge ist die weiße Silhouette für die Statusleiste. Das Manifest nennt die PNGs zusätzlich fürs Installieren. |
 | Lokale Kalender-Attrappe zeigt Serien nur mit dem ersten Termin | Google expandiert Serien selbst (`singleEvents=true`); die Attrappe dient nur der Entwicklung. |
